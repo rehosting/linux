@@ -129,6 +129,7 @@ static char *initcall_command_line;
 static char *execute_command;
 static char *ramdisk_execute_command;
 
+
 /*
  * Used to generate warnings if static_key manipulation functions are used
  * before jump_label_init is called.
