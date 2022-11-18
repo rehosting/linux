@@ -44,6 +44,7 @@
 #include <linux/userfaultfd_k.h>
 #include <linux/moduleparam.h>
 #include <linux/pkeys.h>
+#include <linux/igloo.h>
 
 #include <linux/uaccess.h>
 #include <asm/cacheflush.h>
@@ -55,6 +56,21 @@
 #ifndef arch_mmap_check
 #define arch_mmap_check(addr, len, flags)	(0)
 #endif
+
+unsigned long igloo_task_size = 0;
+static int __init early_igloo_task_size(char *p)
+{
+    unsigned long task_size;
+    if (kstrtoul(p, 0, &task_size) < 0 ) {
+        pr_warn("Could not parse igloo_task_size parameter %s\n", p);
+        return -1;
+    }
+    igloo_task_size = task_size;
+    pr_warn_once("Using igloo_task_size: 0x%lx\n", igloo_task_size);
+    return 0;
+}
+
+early_param("igloo_task_size", early_igloo_task_size);
 
 #ifdef CONFIG_HAVE_ARCH_MMAP_RND_BITS
 const int mmap_rnd_bits_min = CONFIG_ARCH_MMAP_RND_BITS_MIN;
