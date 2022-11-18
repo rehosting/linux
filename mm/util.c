@@ -218,7 +218,12 @@ EXPORT_SYMBOL(strndup_user);
 #if defined(CONFIG_MMU) && !defined(HAVE_ARCH_PICK_MMAP_LAYOUT)
 void arch_pick_mmap_layout(struct mm_struct *mm)
 {
-	mm->mmap_base = TASK_UNMAPPED_BASE;
+	if (igloo_task_size){
+		// just applicable for ARM
+		mm->mmap_base = (UL(igloo_task_size) / 3);
+	} else {
+		mm->mmap_base = TASK_UNMAPPED_BASE;
+	}
 	mm->get_unmapped_area = arch_get_unmapped_area;
 	mm->unmap_area = arch_unmap_area;
 }

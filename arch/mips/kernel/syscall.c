@@ -148,8 +148,11 @@ void arch_pick_mmap_layout(struct mm_struct *mm)
 		else
 			random_factor &= 0xffffffful;
 	}
-
-	mm->mmap_base = TASK_UNMAPPED_BASE + random_factor;
+	if (igloo_task_size){
+		mm->mmap_base = PAGE_ALIGN(igloo_task_size / 3);
+	}else{
+		mm->mmap_base = TASK_UNMAPPED_BASE + random_factor;
+	}
 	mm->get_unmapped_area = arch_get_unmapped_area;
 	mm->unmap_area = arch_unmap_area;
 }
