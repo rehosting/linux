@@ -9,6 +9,7 @@
 #include <linux/compiler.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
+#include <linux/igloo.h>
 #include <linux/mman.h>
 #include <linux/export.h>
 #include <linux/personality.h>
@@ -42,7 +43,13 @@ static unsigned long mmap_base(unsigned long rnd)
 	else if (gap > MAX_GAP)
 		gap = MAX_GAP;
 
-	return PAGE_ALIGN(TASK_SIZE - gap - rnd);
+    //Begin for igloo: if we moved the stack, we have to move mmap
+    if(igloo_task_size) {
+        return PAGE_ALIGN(igloo_task_size - gap - rnd);
+    } else {
+        return PAGE_ALIGN(TASK_SIZE - gap - rnd);
+    }
+    //End for igloo
 }
 
 #define COLOUR_ALIGN(addr, pgoff)				\
