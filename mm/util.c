@@ -437,7 +437,13 @@ static unsigned long mmap_base(unsigned long rnd, struct rlimit *rlim_stack)
 	 * task. mmap_base starts directly below the stack and grows
 	 * downwards.
 	 */
-	return PAGE_ALIGN_DOWN(mmap_upper_limit(rlim_stack) - rnd);
+	//Begin for igloo: if we moved the stack, we have to move mmap
+	if(igloo_task_size) {
+		return PAGE_ALIGN_DOWN(igloo_task_size - rnd);
+	} else {
+		return PAGE_ALIGN_DOWN(mmap_upper_limit(rlim_stack) - rnd);
+	}
+	//End for igloo
 #else
 	unsigned long gap = rlim_stack->rlim_cur;
 	unsigned long pad = stack_guard_gap;
@@ -455,7 +461,13 @@ static unsigned long mmap_base(unsigned long rnd, struct rlimit *rlim_stack)
 	else if (gap > MAX_GAP)
 		gap = MAX_GAP;
 
-	return PAGE_ALIGN(STACK_TOP - gap - rnd);
+	//Begin for igloo: if we moved the stack, we have to move mmap
+	if(igloo_task_size) {
+		return PAGE_ALIGN(igloo_task_size - gap - rnd);
+	} else {
+		return PAGE_ALIGN(STACK_TOP - gap - rnd);
+	}
+	//End for igloo
 #endif
 }
 
