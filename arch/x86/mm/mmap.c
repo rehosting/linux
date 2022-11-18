@@ -13,6 +13,7 @@
 
 #include <linux/personality.h>
 #include <linux/mm.h>
+#include <linux/igloo.h>
 #include <linux/random.h>
 #include <linux/limits.h>
 #include <linux/sched/signal.h>
@@ -102,7 +103,13 @@ static unsigned long mmap_base(unsigned long rnd, unsigned long task_size,
 	else if (gap > gap_max)
 		gap = gap_max;
 
-	return PAGE_ALIGN(task_size - gap - rnd);
+    //Begin for igloo: if we moved the stack, we have to move mmap
+    if(igloo_task_size) {
+        return PAGE_ALIGN(igloo_task_size - gap - rnd);
+    } else {
+        return PAGE_ALIGN(task_size - gap - rnd);
+    }
+    //End for igloo
 }
 
 static unsigned long mmap_legacy_base(unsigned long rnd,

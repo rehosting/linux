@@ -10,6 +10,7 @@
 #include <linux/elf-randomize.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
+#include <linux/igloo.h>
 #include <linux/mman.h>
 #include <linux/export.h>
 #include <linux/personality.h>
@@ -19,6 +20,10 @@
 
 unsigned long shm_align_mask = PAGE_SIZE - 1;	/* Sane caches */
 EXPORT_SYMBOL(shm_align_mask);
+
+/* gap between mmap and stack */
+#define MIN_GAP (128*1024*1024UL)
+#define MAX_GAP ((TASK_SIZE)/6*5)
 
 #define COLOUR_ALIGN(addr, pgoff)				\
 	((((addr) + shm_align_mask) & ~shm_align_mask) +	\

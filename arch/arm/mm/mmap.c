@@ -4,6 +4,7 @@
  */
 #include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/igloo.h>
 #include <linux/mman.h>
 #include <linux/shm.h>
 #include <linux/sched/signal.h>
@@ -16,6 +17,38 @@
 #define COLOUR_ALIGN(addr,pgoff)		\
 	((((addr)+SHMLBA-1)&~(SHMLBA-1)) +	\
 	 (((pgoff)<<PAGE_SHIFT) & (SHMLBA-1)))
+
+/* gap between mmap and stack */
+#define MIN_GAP (128*1024*1024UL)
+#define MAX_GAP ((TASK_SIZE)/6*5)
+
+static int mmap_is_legacy(void)
+{
+	if (current->personality & ADDR_COMPAT_LAYOUT)
+		return 1;
+
+	if (rlimit(RLIMIT_STACK) == RLIM_INFINITY)
+		return 1;
+
+	return sysctl_legacy_va_layout;
+}
+
+static unsigned long mmap_base(unsigned long rnd)
+{
+	unsigned long gap = rlimit(RLIMIT_STACK);
+
+	if (gap < MIN_GAP)
+		gap = MIN_GAP;
+	else if (gap > MAX_GAP)
+		gap = MAX_GAP;
+    //Begin for igloo: if we moved the stack, we have to move mmap
+    if(igloo_task_size) {
+        return PAGE_ALIGN(igloo_task_size - gap - rnd);
+    } else {
+        return PAGE_ALIGN(TASK_SIZE - gap - rnd);
+    }
+    //End for igloo
+}
 
 /*
  * We need to ensure that shared mappings are correctly aligned to

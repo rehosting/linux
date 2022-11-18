@@ -158,6 +158,7 @@ static size_t initargs_offs;
 static char *execute_command;
 static char *ramdisk_execute_command = "/init";
 
+
 /*
  * Used to generate warnings if static_key manipulation functions are used
  * before jump_label_init is called.
