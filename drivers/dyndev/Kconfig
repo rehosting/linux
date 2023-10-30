@@ -1,0 +1,4 @@
+config DYNDEV
+	bool "Dynamic Devices"
+	help
+		Changes to support dynamic devices

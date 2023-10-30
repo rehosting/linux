@@ -12,6 +12,7 @@ MAKEFLAGS += --include-dir=$(srctree)
 endif
 
 obj-y				+= cache/
+obj-$(CONFIG_DYNDEV)		  += dyndev/
 obj-y				+= irqchip/
 obj-y				+= bus/
 

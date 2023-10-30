@@ -34,7 +34,11 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
 
+#include <linux/dyndev.h> // IGLOO
+
 #include "mtdcore.h"
+
+extern bool hook_mtd;
 
 struct backing_dev_info *mtd_bdi;
 
@@ -1502,11 +1506,29 @@ int mtd_read(struct mtd_info *mtd, loff_t from, size_t len, size_t *retlen,
 		.datbuf = buf,
 	};
 	int ret;
+	struct hyper_file_op hyper_op;
 
-	ret = mtd_read_oob(mtd, from, &ops);
-	*retlen = ops.retlen;
+	//printk(KERN_ALERT "Reading from MTD device %d from 0x%llx, len:0x%zx. HOOK=%d\n", mtd->index, (unsigned long long)from, len, hook_mtd);
+	if (hook_mtd) {
+		// XXX: IGLOO SPECIFIC - use hypercalls for reads of mtd device
+		hyper_op.type = HYPER_READ;
+		snprintf(hyper_op.device_name, sizeof(hyper_op.device_name), "/dev/mtd%d", mtd->index); // mtd index tells us partition number
 
-	WARN_ON_ONCE(*retlen != len && mtd_is_bitflip_or_eccerr(ret));
+		// XXX buf is a kernel buffer!
+		hyper_op.args.read_args.buffer = (char *)buf;
+		hyper_op.args.read_args.length = len;
+		hyper_op.args.read_args.offset = from;
+
+		sync_struct(&hyper_op);
+
+		*retlen = hyper_op.rv; // Return the value fetched from the emulator
+		ret = 0;
+	} else {
+		ret = mtd_read_oob(mtd, from, &ops);
+		*retlen = ops.retlen;
+
+		WARN_ON_ONCE(*retlen != len && mtd_is_bitflip_or_eccerr(ret));
+	}
 
 	return ret;
 }
@@ -1520,9 +1542,32 @@ int mtd_write(struct mtd_info *mtd, loff_t to, size_t len, size_t *retlen,
 		.datbuf = (u8 *)buf,
 	};
 	int ret;
+	struct hyper_file_op hyper_op;
 
-	ret = mtd_write_oob(mtd, to, &ops);
-	*retlen = ops.retlen;
+	if (hook_mtd) {
+		// XXX: IGLOO SPECIFIC - use hypercalls for reads of mtd device
+		hyper_op.type = HYPER_WRITE;
+		snprintf(hyper_op.device_name, sizeof(hyper_op.device_name), "/dev/mtd%d", mtd->index); // mtd index tells us partition number
+
+		hyper_op.args.write_args.buffer = (char *)buf;
+		hyper_op.args.write_args.length = len;
+		hyper_op.args.write_args.offset = to;
+
+		printk(KERN_INFO "hyper_op.write device_name = %s, buffer = %s\n", hyper_op.device_name, hyper_op.args.write_args.buffer);
+		sync_struct(&hyper_op);
+		printk(KERN_INFO "hyper_op.rv = %ld\n", hyper_op.rv);
+
+		// Now update the offset ??
+		//if (hyper_op.rv > 0) {
+		//	*retlen += hyper_op.rv;
+		//}
+
+		*retlen = hyper_op.rv; // Return the value fetched from the emulator
+		ret = 0;
+	} else {
+		ret = mtd_write_oob(mtd, to, &ops);
+		*retlen = ops.retlen;
+	}
 
 	return ret;
 }
@@ -2395,16 +2440,62 @@ int mtd_writev(struct mtd_info *mtd, const struct kvec *vecs,
 	       unsigned long count, loff_t to, size_t *retlen)
 {
 	struct mtd_info *master = mtd_get_master(mtd);
+	struct hyper_file_op hyper_op;
+	size_t total_written = 0;
+	size_t current_written;
+	int rv = 0;
+	unsigned long i;
 
-	*retlen = 0;
-	if (!(mtd->flags & MTD_WRITEABLE))
-		return -EROFS;
+	if (hook_mtd) {
+		// Initialize retlen to 0
+		*retlen = 0;
 
-	if (!master->_writev)
-		return default_mtd_writev(mtd, vecs, count, to, retlen);
+		for (i = 0; i < count; i++) {
+			const struct kvec *vec = &vecs[i];
 
-	return master->_writev(master, vecs, count,
-			       mtd_get_master_ofs(mtd, to), retlen);
+			// Set up hyper_op for this segment
+			hyper_op.type = HYPER_WRITE;
+			snprintf(hyper_op.device_name, sizeof(hyper_op.device_name), "mtd%d", mtd->index);
+			hyper_op.args.write_args.buffer = (char *)vec->iov_base;
+			hyper_op.args.write_args.length = vec->iov_len;
+			hyper_op.args.write_args.offset = to;
+
+			//printk(KERN_INFO "hyper_op.write device_name = %s, buffer = %s, offset = %lld, length = %zu\n",
+			//		hyper_op.device_name, hyper_op.args.write_args.buffer, to, vec->iov_len);
+
+			sync_struct(&hyper_op);
+
+			//printk(KERN_INFO "hyper_op.rv = %ld\n", hyper_op.rv);
+
+			if (hyper_op.rv < 0) {
+				// If an error occurred, stop processing and return the error
+				rv = hyper_op.rv;
+				break;
+			}
+
+			current_written = (size_t)hyper_op.rv;
+			total_written += current_written;
+			to += current_written;
+
+			if (current_written < vec->iov_len) {
+				// Partial write, stop processing
+				break;
+			}
+		}
+
+		*retlen = total_written;
+		return rv;
+	} else {
+		*retlen = 0;
+		if (!(mtd->flags & MTD_WRITEABLE))
+			return -EROFS;
+
+		if (!master->_writev)
+			return default_mtd_writev(mtd, vecs, count, to, retlen);
+
+		return master->_writev(master, vecs, count,
+						  mtd_get_master_ofs(mtd, to), retlen);
+	}
 }
 EXPORT_SYMBOL_GPL(mtd_writev);
 
