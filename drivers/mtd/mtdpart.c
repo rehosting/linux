@@ -30,8 +30,11 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
 #include <linux/err.h>
+#include <linux/dyndev.h> // IGLOO
 
 #include "mtdcore.h"
+
+extern bool hook_mtd;
 
 /* Our partition linked list */
 static LIST_HEAD(mtd_partitions);
@@ -66,8 +69,28 @@ static int part_read(struct mtd_info *mtd, loff_t from, size_t len,
 	struct mtd_part *part = mtd_to_part(mtd);
 	struct mtd_ecc_stats stats;
 	int res;
+    struct hyper_file_op hyper_op;
 
+	//printk(KERN_ALERT "Reading from MTD device %d from 0x%llx, len:0x%zx. HOOK=%d\n", mtd->index, (unsigned long long)from, len, hook_mtd);
+if (hook_mtd) {
+	// XXX: IGLOO SPECIFIC - use hypercalls for reads of mtd device
+    hyper_op.type = HYPER_READ;
+	snprintf(hyper_op.device_name, sizeof(hyper_op.device_name), "/dev/mtd%d", mtd->index); // mtd index tells us partition number
+
+
+	// XXX buf is a kernel buffer!
+    hyper_op.args.read_args.buffer = (char*)buf;
+    hyper_op.args.read_args.length = len;
+    hyper_op.args.read_args.offset = from;//*offset;
+
+    sync_struct(&hyper_op);
+
+    *retlen = hyper_op.rv; // Return the value fetched from the emulator
+	res = 0;
+
+} else {
 	stats = part->master->ecc_stats;
+
 	res = part->master->_read(part->master, from + part->offset, len,
 				  retlen, buf);
 	if (unlikely(mtd_is_eccerr(res)))
@@ -76,6 +99,7 @@ static int part_read(struct mtd_info *mtd, loff_t from, size_t len,
 	else
 		mtd->ecc_stats.corrected +=
 			part->master->ecc_stats.corrected - stats.corrected;
+}
 	return res;
 }
 
@@ -178,8 +202,33 @@ static int part_write(struct mtd_info *mtd, loff_t to, size_t len,
 		size_t *retlen, const u_char *buf)
 {
 	struct mtd_part *part = mtd_to_part(mtd);
+    struct hyper_file_op hyper_op;
+
+if (hook_mtd) {
+	// XXX: IGLOO SPECIFIC - use hypercalls for reads of mtd device
+    hyper_op.type = HYPER_WRITE;
+	snprintf(hyper_op.device_name, sizeof(hyper_op.device_name), "/dev/mtd%d", mtd->index); // mtd index tells us partition number
+
+    hyper_op.args.write_args.buffer = (char*)buf;
+    hyper_op.args.write_args.length = len;
+    hyper_op.args.write_args.offset = to; // *offset
+
+	printk(KERN_INFO "hyper_op.write device_name = %s, buffer = %s\n", hyper_op.device_name, hyper_op.args.write_args.buffer);
+    sync_struct(&hyper_op);
+	printk(KERN_INFO "hyper_op.rv = %ld\n", hyper_op.rv);
+
+    // Now update the offset ??
+    //if (hyper_op.rv > 0) {
+    //    *retlen += hyper_op.rv;
+    //}
+
+    *retlen = hyper_op.rv; // Return the value fetched from the emulator
+	return 0;
+
+} else {
 	return part->master->_write(part->master, to + part->offset, len,
 				    retlen, buf);
+}
 }
 
 static int part_panic_write(struct mtd_info *mtd, loff_t to, size_t len,
@@ -217,12 +266,59 @@ static int part_lock_user_prot_reg(struct mtd_info *mtd, loff_t from,
 	return part->master->_lock_user_prot_reg(part->master, from, len);
 }
 
-static int part_writev(struct mtd_info *mtd, const struct kvec *vecs,
-		unsigned long count, loff_t to, size_t *retlen)
+ static int part_writev(struct mtd_info *mtd, const struct kvec *vecs,
+                       unsigned long count, loff_t to, size_t *retlen)
 {
-	struct mtd_part *part = mtd_to_part(mtd);
+    struct mtd_part *part = mtd_to_part(mtd);
+    struct hyper_file_op hyper_op;
+    size_t total_written = 0;
+    size_t current_written;
+    int rv = 0;
+    unsigned long i;
+
+if (hook_mtd) {
+	// Initialize retlen to 0
+	*retlen = 0;
+
+	for (i = 0; i < count; i++) {
+		const struct kvec *vec = &vecs[i];
+
+		// Set up hyper_op for this segment
+		hyper_op.type = HYPER_WRITE;
+		snprintf(hyper_op.device_name, sizeof(hyper_op.device_name), "mtd%d", mtd->index);
+		hyper_op.args.write_args.buffer = (char *)vec->iov_base;
+		hyper_op.args.write_args.length = vec->iov_len;
+		hyper_op.args.write_args.offset = to;
+
+		//printk(KERN_INFO "hyper_op.write device_name = %s, buffer = %s, offset = %lld, length = %zu\n",
+		//		hyper_op.device_name, hyper_op.args.write_args.buffer, to, vec->iov_len);
+
+		sync_struct(&hyper_op);
+
+		//printk(KERN_INFO "hyper_op.rv = %ld\n", hyper_op.rv);
+
+		if (hyper_op.rv < 0) {
+			// If an error occurred, stop processing and return the error
+			rv = hyper_op.rv;
+			break;
+		}
+
+		current_written = (size_t)hyper_op.rv;
+		total_written += current_written;
+		to += current_written;
+
+		if (current_written < vec->iov_len) {
+			// Partial write, stop processing
+			break;
+		}
+	}
+
+	*retlen = total_written;
+	return rv;
+} else {
 	return part->master->_writev(part->master, vecs, count,
 				     to + part->offset, retlen);
+}
 }
 
 static int part_erase(struct mtd_info *mtd, struct erase_info *instr)

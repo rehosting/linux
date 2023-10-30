@@ -5,6 +5,7 @@
 # Rewritten to use lists instead of if-statements.
 #
 
+obj-$(CONFIG_DYNDEV)		  += dyndev/
 obj-y				+= irqchip/
 obj-y				+= bus/
 
