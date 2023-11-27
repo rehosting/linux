@@ -101,7 +101,9 @@ struct proc_dir_entry *proc_create_single_data(const char *name, umode_t mode,
 		int (*show)(struct seq_file *, void *), void *data);
 #define proc_create_single(name, mode, parent, show) \
 	proc_create_single_data(name, mode, parent, show, NULL)
- 
+
+extern int xlate_proc_name(const char *name, struct proc_dir_entry **ret, const char **residual);
+
 extern struct proc_dir_entry *proc_create_data(const char *, umode_t,
 					       struct proc_dir_entry *,
 					       const struct proc_ops *,
@@ -181,6 +183,7 @@ static inline struct proc_dir_entry *_proc_mkdir(const char *name, umode_t mode,
 {
 	return NULL;
 }
+int xlate_proc_name(const char *name, struct proc_dir_entry **ret, const char **residual) {return NULL;}
 static inline struct proc_dir_entry *proc_mkdir_data(const char *name,
 	umode_t mode, struct proc_dir_entry *parent, void *data) { return NULL; }
 static inline struct proc_dir_entry *proc_mkdir_mode(const char *name,

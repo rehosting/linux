@@ -169,7 +169,7 @@ static int __xlate_proc_name(const char *name, struct proc_dir_entry **ret,
 	while ((next = strchr(cp, '/')) != NULL) {
 		de = pde_subdir_find(de, cp, next - cp);
 		if (!de) {
-			WARN(1, "name '%s'\n", name);
+			//WARN(1, "name '%s'\n", name);
 			return -ENOENT;
 		}
 		cp = next + 1;
@@ -179,7 +179,7 @@ static int __xlate_proc_name(const char *name, struct proc_dir_entry **ret,
 	return 0;
 }
 
-static int xlate_proc_name(const char *name, struct proc_dir_entry **ret,
+int xlate_proc_name(const char *name, struct proc_dir_entry **ret,
 			   const char **residual)
 {
 	int rv;
@@ -189,6 +189,7 @@ static int xlate_proc_name(const char *name, struct proc_dir_entry **ret,
 	read_unlock(&proc_subdir_lock);
 	return rv;
 }
+EXPORT_SYMBOL(xlate_proc_name);
 
 static DEFINE_IDA(proc_inum_ida);
 
