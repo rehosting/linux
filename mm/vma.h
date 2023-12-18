@@ -136,7 +136,8 @@ static inline pgoff_t vma_pgoff_offset(struct vm_area_struct *vma,
 #ifdef CONFIG_DEBUG_VM_MAPLE_TREE
 void validate_mm(struct mm_struct *mm);
 #else
-#define validate_mm(mm) do { } while (0)
+extern void log_mm(struct mm_struct *mm);
+#define validate_mm(mm) do { log_mm(mm); } while (0)
 #endif
 
 /* Required for expand_downwards(). */

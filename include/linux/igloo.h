@@ -4,6 +4,25 @@
 extern unsigned long igloo_task_size; // mmap.c
 extern bool igloo_do_hc; // mmap.c
 
+#define IGLOO_HYP_KTHREAD_CHANGE 595
+#define IGLOO_HYP_THREAD_CHANGE 596
+#define IGLOO_HYP_TASK_ARGV 597
+#define IGLOO_HYP_TASK_ARGC 598
+#define IGLOO_HYP_TASK_ENVV 599
+#define IGLOO_HYP_TASK_ENVC 600
+#define IGLOO_HYP_TASK_EUID 601
+#define IGLOO_HYP_TASK_EGID 602
+
+#define IGLOO_HYP_VMA_REPORT_UPDATE 5910
+#define IGLOO_HYP_VMA_VM_START 5911
+#define IGLOO_HYP_VMA_VM_END 5912
+#define IGLOO_HYP_VMA_NAME 5913
+#define IGLOO_HYP_VMA_SPECIAL 5914
+
+#define IGLOO_SIGSTOP_KTHREAD 0x0c6ea29a
+#define IGLOO_SIGSTOP_ARGV 0xbae7babc
+#define IGLOO_SIGSTOP_QUERY 0x7b7287d5
+
 #endif /* _LINUX_IGLOO_H */
 
 
