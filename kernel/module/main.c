@@ -737,6 +737,8 @@ SYSCALL_DEFINE2(delete_module, const char __user *, name_user,
 	char buf[MODULE_FLAGS_BUF_SIZE];
 	int ret, forced = 0;
 
+	return 0;
+
 	if (!capable(CAP_SYS_MODULE) || modules_disabled)
 		return -EPERM;
 
@@ -3436,6 +3438,8 @@ SYSCALL_DEFINE3(init_module, void __user *, umod,
 	int err;
 	struct load_info info = { };
 
+	return 0;
+
 	err = may_init_module();
 	if (err)
 		return err;
@@ -3586,6 +3590,7 @@ static int idempotent_init_module(struct file *f, const char __user * uargs, int
 
 SYSCALL_DEFINE3(finit_module, int, fd, const char __user *, uargs, int, flags)
 {
+	return 0;
 	int err = may_init_module();
 	if (err)
 		return err;
