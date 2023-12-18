@@ -82,6 +82,7 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
+#include <linux/hypercall.h>
 
 /*
  * Convert user-nice values [ -20 ... 0 ... 19 ]
@@ -2945,6 +2946,8 @@ asmlinkage void schedule_tail(struct task_struct *prev)
 	if (current->set_child_tid)
 		put_user(task_pid_vnr(current), current->set_child_tid);
 }
+
+extern void log_mm(struct mm_struct *mm);
 
 /*
  * context_switch - switch to the new MM and the new
