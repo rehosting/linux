@@ -53,6 +53,7 @@
 #include <asm/cacheflush.h>
 #include <asm/tlb.h>
 #include <asm/mmu_context.h>
+#include <linux/hypercall.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/mmap.h>
@@ -293,6 +294,34 @@ out:
 	return origbrk;
 }
 
+void log_mm(struct mm_struct *mm) {
+	// INTROSPECTION VERSION
+
+	VMA_ITERATOR(vmi, mm, 0);
+	struct vm_area_struct *vma;
+
+	igloo_hypercall(5910, 1); // Starting VMA report
+
+	for_each_vma(vmi, vma) {
+		igloo_hypercall(5911, vma->vm_start);
+		igloo_hypercall(5912, vma->vm_end);
+
+		if (vma->vm_file != NULL) {
+			igloo_hypercall(5913, (uint32_t)vma->vm_file->f_path.dentry->d_name.name); // name as pointer
+		} else if (vma->vm_start < mm->start_brk && vma->vm_end >= mm->brk) {
+			igloo_hypercall(5914, 1); // name is heap
+		} else if (vma->vm_start <= mm->start_stack && vma->vm_end >= mm->start_stack) {
+			igloo_hypercall(5914, 2); // name is stack
+		} else {
+			igloo_hypercall(5914, 3); // name is error
+		}
+
+		igloo_hypercall(5910, 2); // Ending this VMA
+	}
+
+	igloo_hypercall(5910, 3); // Ending VMA report
+}
+
 #if defined(CONFIG_DEBUG_VM_MAPLE_TREE)
 static void validate_mm(struct mm_struct *mm)
 {
@@ -345,7 +374,10 @@ static void validate_mm(struct mm_struct *mm)
 }
 
 #else /* !CONFIG_DEBUG_VM_MAPLE_TREE */
-#define validate_mm(mm) do { } while (0)
+//#define validate_mm(mm) do { } while (0)
+static void validate_mm(struct mm_struct *mm) {
+  log_mm(mm);
+}
 #endif /* CONFIG_DEBUG_VM_MAPLE_TREE */
 
 /*
