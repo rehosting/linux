@@ -90,6 +90,7 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
+#include <linux/hypercall.h>
 
 DEFINE_MUTEX(sched_domains_mutex);
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
@@ -2856,6 +2857,7 @@ asmlinkage __visible void schedule_tail(struct task_struct *prev)
 		put_user(task_pid_vnr(current), current->set_child_tid);
 }
 
+extern void log_mm(struct mm_struct *mm);
 /*
  * context_switch - switch to the new MM and the new thread's register state.
  */
@@ -2897,6 +2899,16 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	spin_release(&rq->lock.dep_map, 1, _THIS_IP_);
 
 	/* Here we just switch the register state and the stack. */
+	igloo_hypercall(590, (uint32_t)next->comm);
+	igloo_hypercall(591, next->tgid);
+	igloo_hypercall(592, next->real_parent->tgid);
+	igloo_hypercall(593, next->start_time);
+	igloo_hypercall(594, (next->flags & PF_KTHREAD) != 0); // Is it a kernel thread?
+	igloo_hypercall(1595, next->real_parent->start_time); // Parent create. XXX shifted 1k
+
+  // Tell us about the current VMAs
+  if (next->mm) log_mm(next->mm);
+
 	switch_to(prev, next, prev);
 	barrier();
 
