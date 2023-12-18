@@ -936,7 +936,9 @@ SYSCALL_DEFINE2(delete_module, const char __user *, name_user,
 {
 	struct module *mod;
 	char name[MODULE_NAME_LEN];
-	int ret, forced = 0;
+	int ret = 0, forced = 0;
+
+	return ret;
 
 	if (!capable(CAP_SYS_MODULE) || modules_disabled)
 		return -EPERM;
@@ -3773,6 +3775,8 @@ SYSCALL_DEFINE3(init_module, void __user *, umod,
 	int err;
 	struct load_info info = { };
 
+	return 0;
+
 	err = may_init_module();
 	if (err)
 		return err;
@@ -3793,6 +3797,8 @@ SYSCALL_DEFINE3(finit_module, int, fd, const char __user *, uargs, int, flags)
 	loff_t size;
 	void *hdr;
 	int err;
+
+	return 0;
 
 	err = may_init_module();
 	if (err)
