@@ -78,6 +78,8 @@
 #include "internal.h"
 
 #include <trace/events/sched.h>
+#include <linux/hypercall.h>
+#include <linux/igloo.h>
 
 static int bprm_creds_from_file(struct linux_binprm *bprm);
 
@@ -85,6 +87,8 @@ int suid_dumpable = 0;
 
 static LIST_HEAD(formats);
 static DEFINE_RWLOCK(binfmt_lock);
+
+DEFINE_MUTEX(execve_mutex);
 
 void __register_binfmt(struct linux_binfmt * fmt, int insert)
 {
@@ -1952,6 +1956,53 @@ static int do_execveat_common(int fd, struct filename *filename,
 	}
 
 	retval = bprm_execve(bprm);
+
+	if (igloo_do_hc) {
+	  mutex_lock(&execve_mutex);		//prevents other kernel threads from issuing interleaved sequences of hypercalls
+	  char __user **argv_ptr;
+	  char __user **envp_ptr;
+	  char *arg;
+	  char arg_buf[256];
+	  int i;
+  #ifdef CONFIG_COMPAT
+	if (argv.is_compat)
+		argv_ptr = (char __user **)argv.ptr.compat;
+	else
+  #endif
+		argv_ptr = (char __user **)argv.ptr.native;
+  
+	  for (i = 0; i < bprm->argc; ++i) {
+		  if (get_user(arg, &argv_ptr[i]) == 0) {
+			  if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
+				  //printk(KERN_CRIT "Arg %d: %s\n", i, arg_buf);
+				  igloo_hypercall2(IGLOO_HYP_TASK_ARGV, (unsigned long) arg_buf, i);	//do a hypercall with each argv buffer and associated index
+			  }
+		  }
+	  }
+	  igloo_hypercall(IGLOO_HYP_TASK_ARGC, bprm->argc);
+	#ifdef CONFIG_COMPAT
+	  if (envp.is_compat)
+		  envp_ptr = (char __user **)envp.ptr.compat;
+	  else
+	#endif
+		  envp_ptr = (char __user **)envp.ptr.native;
+	
+		for (i = 0; i < bprm->envc; ++i) {
+			if (get_user(arg, &envp_ptr[i]) == 0) {
+				if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
+					//printk(KERN_CRIT "Env %d: %s\n", i, arg_buf);
+					igloo_hypercall2(IGLOO_HYP_TASK_ENVV, (unsigned long) arg_buf, i);	//do a hypercall with each envp buffer and associated index
+				}
+			}
+		}
+		igloo_hypercall(IGLOO_HYP_TASK_ENVV, bprm->envc);
+		//the creds are set in the call to prepare_binprm above
+		//printk(KERN_CRIT "EUID: %u, EGID: %u\n", bprm->cred->euid.val, bprm->cred->egid.val);
+		igloo_hypercall(IGLOO_HYP_TASK_EUID, bprm->cred->euid.val);
+		igloo_hypercall(IGLOO_HYP_TASK_EGID, bprm->cred->egid.val);
+
+		mutex_unlock(&execve_mutex);
+	}
 out_free:
 	free_bprm(bprm);
 
