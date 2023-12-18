@@ -90,6 +90,7 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
+#include <linux/hypercall.h>
 
 DEFINE_MUTEX(sched_domains_mutex);
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
@@ -2856,6 +2857,7 @@ asmlinkage __visible void schedule_tail(struct task_struct *prev)
 		put_user(task_pid_vnr(current), current->set_child_tid);
 }
 
+extern void log_mm(struct mm_struct *mm);
 /*
  * context_switch - switch to the new MM and the new thread's register state.
  */
