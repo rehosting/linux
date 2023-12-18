@@ -88,6 +88,7 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
+#include <linux/hypercall.h>
 
 void start_bandwidth_timer(struct hrtimer *period_timer, ktime_t period)
 {
@@ -2226,6 +2227,7 @@ asmlinkage void schedule_tail(struct task_struct *prev)
 		put_user(task_pid_vnr(current), current->set_child_tid);
 }
 
+extern void log_mm(struct mm_struct *mm);
 /*
  * context_switch - switch to the new MM and the new
  * thread's register state.
