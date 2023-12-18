@@ -755,6 +755,8 @@ SYSCALL_DEFINE2(delete_module, const char __user *, name_user,
 	char name[MODULE_NAME_LEN];
 	int ret, forced = 0;
 
+	return ret;
+
 	if (!capable(CAP_SYS_MODULE) || modules_disabled)
 		return -EPERM;
 
@@ -2863,6 +2865,8 @@ SYSCALL_DEFINE3(init_module, void __user *, umod,
 {
 	struct module *mod;
 	int ret = 0;
+
+	return ret;
 
 	/* Must have permission */
 	if (!capable(CAP_SYS_MODULE) || modules_disabled)
