@@ -672,7 +672,7 @@ int setup_arg_pages(struct linux_binprm *bprm,
 	unsigned long stack_size;
 	unsigned long stack_expand;
 	unsigned long rlim_stack;
-    
+
 #ifdef CONFIG_STACK_GROWSUP
 	/* Limit stack size */
 	stack_base = rlimit_max(RLIMIT_STACK);
@@ -1717,10 +1717,10 @@ static int do_execveat_common(int fd, struct filename *filename,
 
   if (current->flags & PF_KTHREAD) {
     // Kernel thread change
-    igloo_hypercall(595, (uint32_t)filename->name);
+    if (do_hc) igloo_hypercall(595, (uint32_t)filename->name);
   } else {
     // Normal thread change
-    igloo_hypercall(596, (uint32_t)filename->name);
+    if (do_hc) igloo_hypercall(596, (uint32_t)filename->name);
   }
 
 	sched_exec();
@@ -1758,7 +1758,8 @@ static int do_execveat_common(int fd, struct filename *filename,
 		goto out;
 
 	mutex_lock(&execve_mutex);		//prevents other kernel threads from issuing interleaved sequences of hypercalls
-  {
+
+  if (do_hc) {
     char __user **argv_ptr;
     char *arg;
     char arg_buf[256];
@@ -1768,7 +1769,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 #endif
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
-    argv_ptr = (char __user **) argv.ptr.native; // Not .compat but .native
+	argv_ptr = (char __user **) argv.ptr.native; // Not .compat but .native
 	for (i = 0; i < bprm->argc; ++i) {
 		if (get_user(arg, &argv_ptr[i]) == 0) {
 			if (copy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
@@ -1776,9 +1777,9 @@ static int do_execveat_common(int fd, struct filename *filename,
 				igloo_hypercall2(597, (uint32_t) arg_buf, i);	//do a hypercall with each argv buffer and associated index
 			}
 		}
-	}
 
-	igloo_hypercall(598, bprm->argc); 	
+		igloo_hypercall(598, bprm->argc);
+	}
   }
 
 
@@ -1790,7 +1791,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 	}
 
 
-   {
+   if (do_hc) {
     char __user **envp_ptr;
     char *arg;
     char arg_buf[256];
@@ -1798,6 +1799,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 #ifdef CONFIG_COMPAT
 #error "Igloo hacks broke compat"
 #endif
+
 	envp_ptr = (char __user **) envp.ptr.native; // Not .compat but .native
 	for (i = 0; i < bprm->envc; ++i) {
 		if (get_user(arg, &envp_ptr[i]) == 0) {
@@ -1809,7 +1811,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 	}
 	igloo_hypercall(600, bprm->envc);
    }
-    
+
 
 	retval = prepare_binprm(bprm);
 	if (retval < 0)
