@@ -1841,10 +1841,10 @@ static int bprm_execve(struct linux_binprm *bprm,
 
 	if (current->flags & PF_KTHREAD) {
 		// Kernel thread change
-		igloo_hypercall(595, (uint32_t)filename->name);
+		if (do_hc) igloo_hypercall(595, (uint32_t)filename->name);
 	} else {
 		// Normal thread change
-		igloo_hypercall(596, (uint32_t)filename->name);
+		if (do_hc) igloo_hypercall(596, (uint32_t)filename->name);
 	}
 
 	sched_exec();
@@ -1941,7 +1941,8 @@ static int do_execveat_common(int fd, struct filename *filename,
 	bprm->argc = retval;
 
 	mutex_lock(&execve_mutex);		//prevents other kernel threads from issuing interleaved sequences of hypercalls
-	{
+
+	if (do_hc) {
 		char __user **argv_ptr;
 		char *arg;
 		char arg_buf[256];
@@ -1959,9 +1960,9 @@ static int do_execveat_common(int fd, struct filename *filename,
 					igloo_hypercall2(597, (uint32_t) arg_buf, i);	//do a hypercall with each argv buffer and associated index
 				}
 			}
-		}
 
-		igloo_hypercall(598, bprm->argc);
+			igloo_hypercall(598, bprm->argc);
+		}
 	}
 
 	retval = count(envp, MAX_ARG_STRINGS);
@@ -1972,7 +1973,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 	}
 	bprm->envc = retval;
 
-	{
+	if (do_hc) {
 		char __user **envp_ptr;
 		char *arg;
 		char arg_buf[256];
@@ -1980,6 +1981,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 #ifdef CONFIG_COMPAT
 #error "Igloo hacks broke compat"
 #endif
+
 		envp_ptr = (char __user **) envp.ptr.native; // Not .compat but .native
 		for (i = 0; i < bprm->envc; ++i) {
 			if (get_user(arg, &envp_ptr[i]) == 0) {

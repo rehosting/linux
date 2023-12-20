@@ -65,6 +65,8 @@
 #endif
 
 unsigned long igloo_task_size;
+bool do_hc = true;
+
 static int __init early_igloo_task_size(char *p)
 {
     unsigned long task_size;
@@ -78,6 +80,20 @@ static int __init early_igloo_task_size(char *p)
 }
 
 early_param("igloo_task_size", early_igloo_task_size);
+
+static int __init early_igloo_hc(char *p)
+{
+	unsigned long hc;
+	if (kstrtoul(p, 0, &hc) < 0 ) {
+		pr_warn("Could not parse igloo_hc parameter %s\n", p);
+		return -1;
+	}
+	do_hc = (bool)hc;
+	pr_warn_once("Using igloo_hc: %d\n", do_hc);
+	return 0;
+}
+
+early_param("igloo_hc", early_igloo_hc);
 
 #ifdef CONFIG_HAVE_ARCH_MMAP_RND_BITS
 const int mmap_rnd_bits_min = CONFIG_ARCH_MMAP_RND_BITS_MIN;
@@ -299,6 +315,10 @@ void log_mm(struct mm_struct *mm) {
 
 	VMA_ITERATOR(vmi, mm, 0);
 	struct vm_area_struct *vma;
+
+	if (!do_hc) {
+		return;
+	}
 
 	igloo_hypercall(5910, 1); // Starting VMA report
 
