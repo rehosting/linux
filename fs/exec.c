@@ -1948,11 +1948,12 @@ static int do_execveat_common(int fd, struct filename *filename,
 		char arg_buf[256];
 		int i;
 #ifdef CONFIG_COMPAT
-#error "Igloo hacks broke compat"
+		if (argv.is_compat)
+			argv_ptr = (char __user **)argv.ptr.compat;
+		else
 #endif
-#define MIN(x, y) ((x) < (y) ? (x) : (y))
+		argv_ptr = (char __user **)argv.ptr.native;
 
-		argv_ptr = (char __user **) argv.ptr.native; // Not .compat but .native
 		for (i = 0; i < bprm->argc; ++i) {
 			if (get_user(arg, &argv_ptr[i]) == 0) {
 				if (copy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
@@ -1979,10 +1980,12 @@ static int do_execveat_common(int fd, struct filename *filename,
 		char arg_buf[256];
 		int i;
 #ifdef CONFIG_COMPAT
-#error "Igloo hacks broke compat"
+		if (envp.is_compat)
+			envp_ptr = (char __user **)envp.ptr.compat;
+		else
 #endif
+		envp_ptr = (char __user **) envp.ptr.native;
 
-		envp_ptr = (char __user **) envp.ptr.native; // Not .compat but .native
 		for (i = 0; i < bprm->envc; ++i) {
 			if (get_user(arg, &envp_ptr[i]) == 0) {
 				if (copy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
