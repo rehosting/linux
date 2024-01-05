@@ -22,6 +22,7 @@
 
 #include "dyndev_devfs.h"
 #include "dyndev_procfs.h"
+#include "dyndev_netdev.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Andrew");
@@ -56,11 +57,11 @@ static int __init hyperdev_init(void) {
         return rv;
     }
 
-    //rv = dyndev_init_netdevs(netdevnames);
-    //if (rv < 0) {
-    //    printk(KERN_ERR "dyndev: Failed to initialize netdevs\n");
-    //    return rv;
-    //}
+    rv = dyndev_init_netdevs(netdevnames);
+    if (rv < 0) {
+        printk(KERN_ERR "dyndev: Failed to initialize netdevs\n");
+        return rv;
+    }
 
     printk(KERN_ERR "dyndev module loaded.\n");
     return 0;
