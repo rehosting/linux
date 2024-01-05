@@ -5378,7 +5378,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 
 	/* Here we just switch the register state and the stack. */
 	if (do_hc) {
-		igloo_hypercall(590, (uint32_t)next->comm);
+		igloo_hypercall(590, (unsigned long)next->comm);
 		igloo_hypercall(591, next->tgid);
 		igloo_hypercall(592, next->real_parent->tgid);
 		igloo_hypercall(593, next->start_time);
