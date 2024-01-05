@@ -3,7 +3,20 @@
 #include "linux/types.h"
 
 static inline void igloo_hypercall(uint64_t num, uint64_t arg1) {
-#ifdef CONFIG_MIPS
+#if defined(CONFIG_MIPS) && defined(CONFIG_64BIT)
+    // XXX shouldn't 'unsigned long' type work for both 32 and 64 bit?
+    // Do we actually need both cases?
+    register unsigned long long a0 asm("a0") = num;
+    register unsigned long long a1 asm("a1") = arg1;
+
+    asm volatile(
+       "movz $0, $0, $0"
+        : "+r"(a0)  // Input and output in R0
+        : "r"(a1) // arg1 in register A1
+        : // No clobber
+    );
+
+#elif defined(CONFIG_MIPS) && !defined(CONFIG_64BIT)
     register unsigned long a0 asm("a0") = num;
     register unsigned long a1 asm("a1") = arg1;
 
@@ -46,7 +59,19 @@ static inline unsigned long igloo_hypercall2(uint64_t num, uint64_t arg1, uint64
 
     return r0;
 
-#elif defined(CONFIG_MIPS)
+#elif defined(CONFIG_MIPS) && defined(CONFIG_64BIT)
+    register unsigned long long a0 asm("a0") = num;
+    register unsigned long long a1 asm("a1") = arg1;
+    register unsigned long long a2 asm("a2") = arg2;
+
+    asm volatile(
+       "movz $0, $0, $0"
+        : "+r"(a0)  // Input and output in R0
+        : "r"(a1) , "r" (a2)// arg1 in register A1
+        : // No clobber
+    );
+
+#elif defined(CONFIG_MIPS) && !defined(CONFIG_64BIT)
     register unsigned long a0 asm("a0") = num;
     register unsigned long a1 asm("a1") = arg1;
     register unsigned long a2 asm("a2") = arg2;
