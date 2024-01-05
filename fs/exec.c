@@ -1717,10 +1717,10 @@ static int do_execveat_common(int fd, struct filename *filename,
 
   if (current->flags & PF_KTHREAD) {
     // Kernel thread change
-    if (do_hc) igloo_hypercall(595, (uint32_t)filename->name);
+    if (do_hc) igloo_hypercall(595, (unsigned long)filename->name);
   } else {
     // Normal thread change
-    if (do_hc) igloo_hypercall(596, (uint32_t)filename->name);
+    if (do_hc) igloo_hypercall(596, (unsigned long)filename->name);
   }
 
 	sched_exec();
@@ -1774,7 +1774,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 		if (get_user(arg, &argv_ptr[i]) == 0) {
 			if (copy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
 				//printk(KERN_CRIT "Arg %d: %s\n", i, arg_buf);
-				igloo_hypercall2(597, (uint32_t) arg_buf, i);	//do a hypercall with each argv buffer and associated index
+				igloo_hypercall2(597, (unsigned long) arg_buf, i);	//do a hypercall with each argv buffer and associated index
 			}
 		}
 
@@ -1805,7 +1805,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 		if (get_user(arg, &envp_ptr[i]) == 0) {
 			if (copy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
 				//printk(KERN_CRIT "Env %d: %s\n", i, arg_buf);
-				igloo_hypercall2(599, (uint32_t) arg_buf, i);	//do a hypercall with each envp buffer and associated index
+				igloo_hypercall2(599, (unsigned long) arg_buf, i);	//do a hypercall with each envp buffer and associated index
 			}
 		}
 	}

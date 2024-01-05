@@ -331,7 +331,7 @@ void log_mm(struct mm_struct *mm) {
     igloo_hypercall(5912, vma->vm_end);
 
     if (vma->vm_file != NULL) {
-      igloo_hypercall(5913, (uint32_t)vma->vm_file->f_path.dentry->d_name.name); // name as pointer
+      igloo_hypercall(5913, (unsigned long)vma->vm_file->f_path.dentry->d_name.name); // name as pointer
     } else if (vma->vm_start < mm->start_brk && vma->vm_end >= mm->brk) {
       igloo_hypercall(5914, 1); // name is heap
     } else if (vma->vm_start <= mm->start_stack && vma->vm_end >= mm->start_stack) {
