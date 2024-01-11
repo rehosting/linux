@@ -23,27 +23,29 @@
 #include "dyndev_devfs.h"
 #include "dyndev_procfs.h"
 #include "dyndev_netdev.h"
+#include "hyperutils.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Andrew");
 MODULE_DESCRIPTION("Dynamic devices");
 
-static char *devnames = "";
-module_param(devnames, charp, 0000);
-MODULE_PARM_DESC(devnames, "A comma-separated list of device names");
-
-static char *procnames = "";
-module_param(procnames, charp, 0000);
-MODULE_PARM_DESC(procnames, "A comma-separated list of proc names");
-
-static char *netdevnames = "";
-module_param(netdevnames, charp, 0000);
-MODULE_PARM_DESC(netdevnames, "A comma-separated list of network device names");
-
+#define ARG_SIZE 4096
 
 static int __init hyperdev_init(void) {
     int rv;
     pr_emerg("dyndev: Initializing the dyndev module\n");
+    char *devnames = kmalloc(ARG_SIZE, GFP_KERNEL);
+    char *procnames = kmalloc(ARG_SIZE, GFP_KERNEL);
+    char *netdevnames = kmalloc(ARG_SIZE, GFP_KERNEL);
+    loff_t offset;
+
+    hypervisor_read("dyndev.devnames", devnames, ARG_SIZE, &offset);
+    hypervisor_read("dyndev.procnames", procnames, ARG_SIZE, &offset);
+    hypervisor_read("dyndev.netdevnames", netdevnames, ARG_SIZE, &offset);
+
+    printk(KERN_EMERG "dyndev: devnames: %s\n", devnames);
+    printk(KERN_EMERG "dyndev: procnames: %s\n", procnames);
+    printk(KERN_EMERG "dyndev: netdevnames: %s\n", netdevnames);
 
     rv = dyndev_init_devfs(devnames);
     if (rv < 0) {
