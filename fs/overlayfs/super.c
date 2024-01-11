@@ -948,21 +948,77 @@ static struct dentry *ovl_mount(struct file_system_type *fs_type, int flags,
 	return mount_nodev(fs_type, flags, raw_data, ovl_fill_super);
 }
 
+#define min(x, y) ({				\
+	typeof(x) _min1 = (x);			\
+	typeof(y) _min2 = (y);			\
+	(void) (&_min1 == &_min2);		\
+	_min1 < _min2 ? _min1 : _min2; })
+
 static struct file_system_type ovl_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "overlay",
 	.mount		= ovl_mount,
 	.kill_sb	= kill_anon_super,
 };
+
+static struct dentry *unionfs_mount(struct file_system_type *fs_type, int flags,
+				const char *dev_name, void *raw_data)
+{
+	if (raw_data == NULL){
+		return -EINVAL;
+	}
+
+	char buf[256];
+	strncpy(buf, raw_data, min(sizeof(buf)-1, strlen(raw_data)));
+
+	printk(KERN_ERR "unionfs_mount\n");
+	char *rwdir;
+	char *rdir;
+	char final_buf[256];
+	if (!strncmp(buf, "dirs=", 5)){
+		printk(KERN_ERR "unionfs_mount buf=%s\n", buf);
+		// horribly wrong
+		char *end_rwdir = strnstr(buf, "=rw:", 256);
+		char *end_ro = strnstr(end_rwdir, "=ro", 256);
+
+		memset(end_rwdir, 0, 4);
+		memset(end_ro, 0, 3);
+
+		rwdir = buf + 5;
+		rdir = end_rwdir + 4;
+
+		printk(KERN_ERR "unionfs_mount rwdir=%s, rdir=%s\n", rwdir, rdir);
+		snprintf(final_buf, 256, "upperdir=%s,lowerdir=%s,workdir=/tmp/asdf", rwdir,rdir);
+		printk(KERN_ERR "unionfs_mount final_buf=%s\n", final_buf);
+		return mount_nodev(&ovl_fs_type, flags, (void *)final_buf, ovl_fill_super);
+	}
+	printk(KERN_ERR "NOT WORKING unionfs_mount buf=%s\n", buf);
+	return -12;
+}
+
+static struct file_system_type union_fs_type = {
+	.owner		= THIS_MODULE,
+	.name		= "unionfs",
+	.mount		= unionfs_mount,
+	.kill_sb	= kill_anon_super,
+};
+
 MODULE_ALIAS_FS("overlay");
+// MODULE_ALIAS_FS("union");
 
 static int __init ovl_init(void)
 {
+	printk(KERN_EMERG "registering overlayfs and unionfs\n");
+	int ret = register_filesystem(&union_fs_type);
+	if (ret){
+		printk(KERN_EMERG "could not register unionfs");
+	}
 	return register_filesystem(&ovl_fs_type);
 }
 
 static void __exit ovl_exit(void)
 {
+	unregister_filesystem(&union_fs_type);
 	unregister_filesystem(&ovl_fs_type);
 }
 
