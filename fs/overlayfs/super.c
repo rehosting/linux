@@ -963,6 +963,7 @@ static struct file_system_type ovl_fs_type = {
 	.kill_sb	= kill_anon_super,
 };
 
+#if 0
 static int create_directory(const char *absolute_path, umode_t mode)
 {
     struct dentry *dentry;
@@ -978,6 +979,7 @@ static int create_directory(const char *absolute_path, umode_t mode)
 
     return err;
 }
+#endif
 
 static struct dentry *unionfs_mount(struct file_system_type *fs_type, int flags,
 									const char *dev_name, void *raw_data)
@@ -1030,11 +1032,11 @@ static struct dentry *unionfs_mount(struct file_system_type *fs_type, int flags,
 		// Create a workdir in temp - let's call it /tmp/asdf
 		// This is a hack to get around the fact that overlayfs requires a workdir
 		// and we don't have one
-		int err = create_directory(workdir, 00777);
-		if (err) {
-			printk(KERN_ERR "unionfs_mount: Failed to create workdir: %s\n", workdir);
-			return ERR_PTR(-EINVAL);
-		}
+		//int err = create_directory(workdir, 00777);
+		//if (err) {
+		//	printk(KERN_ERR "unionfs_mount: Failed to create workdir: %s\n", workdir);
+		//	return ERR_PTR(-EINVAL);
+		//}
 
 		snprintf(final_buf, MAX_UNIONFS_SIZE, "upperdir=%s,lowerdir=%s,workdir=%s", rwdir, rdir, workdir);
 		printk(KERN_DEBUG "unionfs_mount: final_buf=%s\n", final_buf);
