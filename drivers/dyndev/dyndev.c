@@ -39,11 +39,13 @@ static int __init hyperdev_init(void) {
     char *procnames = kmalloc(ARG_SIZE, GFP_KERNEL);
     char *netdevnames = kmalloc(ARG_SIZE, GFP_KERNEL);
     char *sysfs = kmalloc(ARG_SIZE, GFP_KERNEL);
-    loff_t offset;
-
+    loff_t offset = 0;
     hypervisor_read("dyndev.devnames", devnames, ARG_SIZE, &offset);
+    offset = 0;
     hypervisor_read("dyndev.procnames", procnames, ARG_SIZE, &offset);
+    offset = 0;
     hypervisor_read("dyndev.netdevnames", netdevnames, ARG_SIZE, &offset);
+    offset = 0;
     hypervisor_read("dyndev.sysfs", sysfs, ARG_SIZE, &offset);
 
     printk(KERN_EMERG "dyndev: devnames: %s\n", devnames);
