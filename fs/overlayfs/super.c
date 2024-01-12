@@ -16,6 +16,8 @@
 #include <linux/statfs.h>
 #include <linux/seq_file.h>
 #include <linux/posix_acl_xattr.h>
+#include <linux/fs.h> // Hacks for unionfs
+#include <linux/namei.h> // Hack for unionfs
 #include "overlayfs.h"
 #include "ovl_entry.h"
 
@@ -961,39 +963,91 @@ static struct file_system_type ovl_fs_type = {
 	.kill_sb	= kill_anon_super,
 };
 
-static struct dentry *unionfs_mount(struct file_system_type *fs_type, int flags,
-				const char *dev_name, void *raw_data)
+static int create_directory(const char *absolute_path, umode_t mode)
 {
-	if (raw_data == NULL){
-		return -EINVAL;
+    struct dentry *dentry;
+    struct path path;
+    int err;
+
+    dentry = kern_path_create(AT_FDCWD, absolute_path, &path, LOOKUP_DIRECTORY);
+    if (IS_ERR(dentry))
+        return PTR_ERR(dentry);
+
+    err = vfs_mkdir(d_inode(path.dentry), dentry, mode);
+    done_path_create(&path, dentry);
+
+    return err;
+}
+
+static struct dentry *unionfs_mount(struct file_system_type *fs_type, int flags,
+									const char *dev_name, void *raw_data)
+{
+	size_t raw_data_len;
+	char *buf;
+	char *rwdir, *rdir;
+	char *final_buf;
+	const char *workdir = "/tmp/.unionfs";
+	int err;
+	struct dentry *dentry;
+
+	if (raw_data == NULL)
+	{
+		return ERR_PTR(-EINVAL);
 	}
 
-	char buf[256];
-	strncpy(buf, raw_data, min(sizeof(buf)-1, strlen(raw_data)));
+#define MAX_UNIONFS_SIZE 1024
 
-	printk(KERN_ERR "unionfs_mount\n");
-	char *rwdir;
-	char *rdir;
-	char final_buf[256];
-	if (!strncmp(buf, "dirs=", 5)){
-		printk(KERN_ERR "unionfs_mount buf=%s\n", buf);
-		// horribly wrong
-		char *end_rwdir = strnstr(buf, "=rw:", 256);
-		char *end_ro = strnstr(end_rwdir, "=ro", 256);
+	// Dynamic allocation based on the input size
+	raw_data_len = strnlen(raw_data, MAX_UNIONFS_SIZE);
+	buf = kmalloc(raw_data_len + 1, GFP_KERNEL);
+	if (!buf) {
+			return ERR_PTR(-ENOMEM);
+	}
+	strncpy(buf, raw_data, raw_data_len);
+	buf[raw_data_len] = '\0';
 
-		memset(end_rwdir, 0, 4);
-		memset(end_ro, 0, 3);
+	if (!strncmp(buf, "dirs=", 5)) {
+		char *end_rwdir = strnstr(buf, "=rw:", raw_data_len);
+		char *end_ro = strnstr(end_rwdir, "=ro", raw_data_len);
+
+		if (!end_rwdir || !end_ro) {
+			kfree(buf);
+			return ERR_PTR(-EINVAL);
+		}
+
+		end_rwdir[0] = '\0';
+		end_ro[0] = '\0';
 
 		rwdir = buf + 5;
 		rdir = end_rwdir + 4;
 
-		printk(KERN_ERR "unionfs_mount rwdir=%s, rdir=%s\n", rwdir, rdir);
-		snprintf(final_buf, 256, "upperdir=%s,lowerdir=%s,workdir=/tmp/asdf", rwdir,rdir);
-		printk(KERN_ERR "unionfs_mount final_buf=%s\n", final_buf);
-		return mount_nodev(&ovl_fs_type, flags, (void *)final_buf, ovl_fill_super);
+		char *final_buf = kmalloc(MAX_UNIONFS_SIZE, GFP_KERNEL);
+		if (!final_buf) {
+			kfree(buf);
+			return ERR_PTR(-ENOMEM);
+		}
+
+		// Create a workdir in temp - let's call it /tmp/asdf
+		// This is a hack to get around the fact that overlayfs requires a workdir
+		// and we don't have one
+		int err = create_directory(workdir, 00777);
+		if (err) {
+			printk(KERN_ERR "unionfs_mount: Failed to create workdir: %s\n", workdir);
+			return ERR_PTR(-EINVAL);
+		}
+
+		snprintf(final_buf, MAX_UNIONFS_SIZE, "upperdir=%s,lowerdir=%s,workdir=%s", rwdir, rdir, workdir);
+		printk(KERN_DEBUG "unionfs_mount: final_buf=%s\n", final_buf);
+
+		struct dentry *dentry = mount_nodev(&ovl_fs_type, flags, (void *)final_buf, ovl_fill_super);
+		kfree(buf);
+		kfree(final_buf);
+		return dentry;
 	}
-	printk(KERN_ERR "NOT WORKING unionfs_mount buf=%s\n", buf);
-	return -12;
+
+    kfree(buf);
+    printk(KERN_ERR "unionfs_mount: Unsupported format: %s\n", buf);
+    return ERR_PTR(-EINVAL);
 }
 
 static struct file_system_type union_fs_type = {
