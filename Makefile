@@ -401,6 +401,10 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -Wno-format-security \
 		   -std=gnu89 $(call cc-option,-fno-PIE)
 
+# IGLOO
+# Fix build with GCC versions >=8 for some targets
+# https://github.com/torvalds/linux/commit/bee2003
+KBUILD_CFLAGS += -Wno-attribute-alias
 
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
