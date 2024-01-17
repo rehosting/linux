@@ -936,6 +936,11 @@ ifdef CONFIG_ZERO_CALL_USED_REGS
 KBUILD_CFLAGS	+= -fzero-call-used-regs=used-gpr
 endif
 
+# IGLOO
+# Fix build with GCC versions >=8 for some targets
+# https://github.com/torvalds/linux/commit/bee2003
+KBUILD_CFLAGS += -Wno-attribute-alias
+
 ifdef CONFIG_FUNCTION_TRACER
 ifdef CONFIG_FTRACE_MCOUNT_USE_CC
   CC_FLAGS_FTRACE	+= -mrecord-mcount
