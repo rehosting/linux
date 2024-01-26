@@ -1956,14 +1956,13 @@ static int do_execveat_common(int fd, struct filename *filename,
 
 		for (i = 0; i < bprm->argc; ++i) {
 			if (get_user(arg, &argv_ptr[i]) == 0) {
-				if (copy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
+				if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
 					//printk(KERN_CRIT "Arg %d: %s\n", i, arg_buf);
 					igloo_hypercall2(597, (unsigned long) arg_buf, i);	//do a hypercall with each argv buffer and associated index
 				}
 			}
-
-			igloo_hypercall(598, bprm->argc);
 		}
+		igloo_hypercall(598, bprm->argc);
 	}
 
 	retval = count(envp, MAX_ARG_STRINGS);
@@ -1988,7 +1987,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 
 		for (i = 0; i < bprm->envc; ++i) {
 			if (get_user(arg, &envp_ptr[i]) == 0) {
-				if (copy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
+				if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
 					//printk(KERN_CRIT "Env %d: %s\n", i, arg_buf);
 					igloo_hypercall2(599, (unsigned long) arg_buf, i);	//do a hypercall with each envp buffer and associated index
 				}
