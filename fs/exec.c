@@ -1382,6 +1382,13 @@ int begin_new_exec(struct linux_binprm * bprm)
 	security_bprm_committing_creds(bprm);
 
 	commit_creds(bprm->cred);
+
+	//printk(KERN_CRIT "EUID: %u, EGID: %u\n", bprm->cred->euid.val, bprm->cred->egid.val);
+	igloo_hypercall(601, bprm->cred->euid.val);
+	igloo_hypercall(602, bprm->cred->egid.val);
+
+	mutex_unlock(&execve_mutex);
+
 	bprm->cred = NULL;
 
 	/*
