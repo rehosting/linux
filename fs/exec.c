@@ -1573,9 +1573,10 @@ static int do_execve_common(struct filename *filename,
 
 	//the creds are set in the call to prepare_binprm above
 	//printk(KERN_CRIT "EUID: %u, EGID: %u\n", bprm->cred->euid.val, bprm->cred->egid.val);
-	igloo_hypercall(601, bprm->cred->euid.val);
-	igloo_hypercall(602, bprm->cred->egid.val);
-
+	if (igloo_do_hc) {
+		igloo_hypercall(601, bprm->cred->euid.val);
+		igloo_hypercall(602, bprm->cred->egid.val);
+	}
 	mutex_unlock(&execve_mutex);
 
 	retval = copy_strings_kernel(1, &bprm->filename, bprm);
