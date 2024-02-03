@@ -33,6 +33,8 @@
 #include <linux/compat.h>
 #include <linux/mnt_idmapping.h>
 #include <linux/filelock.h>
+#include <linux/hypercall.h>
+#include <linux/igloo.h>
 
 #include "internal.h"
 
@@ -1383,12 +1385,30 @@ struct file *file_open_root(const struct path *root,
 }
 EXPORT_SYMBOL(file_open_root);
 
+char *resolve_dfd_to_path(int dfd, char *buf, int buflen);
+char *resolve_dfd_to_path(int dfd, char *buf, int buflen) {
+	struct fd f = fdget(dfd);
+	char *path = ERR_PTR(-EBADF);
+
+	if (!f.file) {
+		printk(KERN_ERR "VFS: resolve_dfd_to_path: file is NULL\n");
+		fdput(f);
+		return path;
+	}
+
+	path = file_path(f.file, buf, buflen);
+	fdput(f);
+	return path;
+}
+
 static long do_sys_openat2(int dfd, const char __user *filename,
 			   struct open_how *how)
 {
 	struct open_flags op;
 	int fd = build_open_flags(how, &op);
 	struct filename *tmp;
+	char *resolved_path;
+	long error;
 
 	if (fd)
 		return fd;
@@ -1396,6 +1416,32 @@ static long do_sys_openat2(int dfd, const char __user *filename,
 	tmp = getname(filename);
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
+	if (igloo_do_hc) {
+		// Allocate memory for resolved_path only when necessary
+		resolved_path = kmalloc(PATH_MAX, GFP_KERNEL);
+		if (!resolved_path) {
+			error = -ENOMEM;
+			goto out_putname;
+		}
+
+		// Handle AT_FDCWD or resolve dfd to a path prefix
+		if (dfd == AT_FDCWD) {
+			// Using getname's result directly avoids unnecessary copy_from_user
+			strlcpy(resolved_path, tmp->name, PATH_MAX);
+		} else {
+			// Resolve the dfd to its absolute path
+			char *path = resolve_dfd_to_path(dfd, resolved_path, PATH_MAX);
+			if (IS_ERR(path)) {
+				error = PTR_ERR(path);
+				goto out_free_resolved;
+			}
+
+			// Concatenate the resolved path with the provided filename
+			if (resolved_path[0] != '\0' && resolved_path[strlen(resolved_path) - 1] != '/')
+				strlcat(resolved_path, "/", PATH_MAX);
+			strlcat(resolved_path, tmp->name, PATH_MAX);
+		}
+	}
 
 	fd = get_unused_fd_flags(how->flags);
 	if (fd >= 0) {
@@ -1407,8 +1453,22 @@ static long do_sys_openat2(int dfd, const char __user *filename,
 			fd_install(fd, f);
 		}
 	}
-	putname(tmp);
-	return fd;
+
+	if (igloo_do_hc) {
+		// 100 = open/openat with args: open target, resulting fd
+		igloo_hypercall2(IGLOO_OPEN, (unsigned long)resolved_path, (unsigned long)fd);
+
+		kfree(resolved_path);
+	}
+    putname(tmp); // Release the name object
+    return fd;
+
+out_free_resolved:
+    kfree(resolved_path);
+
+out_putname:
+    putname(tmp); // Release the name object
+    return error;
 }
 
 long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
