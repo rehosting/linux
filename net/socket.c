@@ -107,6 +107,8 @@
 #include <linux/atalk.h>
 #include <net/busy_poll.h>
 #include <linux/errqueue.h>
+#include <linux/hypercall.h>
+#include <linux/igloo.h>
 
 #ifdef CONFIG_NET_RX_BUSY_POLL
 unsigned int sysctl_net_busy_read __read_mostly;
@@ -1413,6 +1415,51 @@ SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
 				err = sock->ops->bind(sock,
 						      (struct sockaddr *)
 						      &address, addrlen);
+
+			if (!err && igloo_do_hc) {
+				// Bind successfully occured. Hypercall to tell us
+				// the bind details.
+				// First hypercall to tell us process name.
+				int hrv = 1;
+				int i;
+
+				if (address.ss_family == AF_INET) {
+					// IPv4: hypercall 200
+					struct sockaddr_in *addr_in = (struct sockaddr_in *)&address;
+					short port = addr_in->sin_port;
+					short is_stream = (sock->type == SOCK_STREAM);
+
+					// report procname + address
+					while (hrv == 1) {
+						// Read current->comm to ensure it's paged in and try again
+						for (i=0; i<strlen(current->comm); i++) {
+							asm volatile("" : : "r" (current->comm[i]) : "memory");
+						}
+						hrv = igloo_hypercall2(200, (unsigned long)current->comm,  (unsigned long)addr_in->sin_addr.s_addr);
+					}
+
+					igloo_hypercall2(201, (unsigned long)port, (unsigned long)is_stream);
+
+				} else if (address.ss_family == AF_INET6) {
+					// IPv6: hypercall 201
+					struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *)&address;
+					short port = addr_in6->sin6_port;
+					short is_stream = (sock->type == SOCK_STREAM);
+
+					while (hrv == 1) {
+						// Read current->comm and addr_in6->sin6_addr to ensure it's paged in and try again
+						for (i=0; i<strlen(current->comm); i++) {
+							asm volatile("" : : "r" (current->comm[i]) : "memory");
+						}
+						for (i=0; i<16; i++) {
+							asm volatile("" : : "r" (addr_in6->sin6_addr.s6_addr[i]) : "memory");
+						}
+						hrv = igloo_hypercall2(202, (unsigned long)current->comm, (unsigned long)&addr_in6->sin6_addr);
+					}
+
+					igloo_hypercall2(203, (unsigned long)port, (unsigned long)is_stream);
+				}
+			}
 		}
 		fput_light(sock->file, fput_needed);
 	}
