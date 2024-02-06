@@ -15,7 +15,8 @@
 #include <linux/writeback.h>
 #include <linux/buffer_head.h>
 #include <linux/falloc.h>
-
+#include <linux/hypercall.h>
+#include <linux/igloo.h>
 #include <asm/ioctls.h>
 
 /* So that the fiemap access checks can't overflow on 32 bit machines. */
@@ -597,6 +598,30 @@ int do_vfs_ioctl(struct file *filp, unsigned int fd, unsigned int cmd,
 		else
 			error = vfs_ioctl(filp, cmd, arg);
 		break;
+	}
+
+	if (error == -ENOTTY && igloo_do_hc) {
+		char path_buffer[PATH_MAX];
+		char *path;
+
+		// Attempt to resolve the file path
+		path = d_path(&filp->f_path, path_buffer, PATH_MAX);
+		if (IS_ERR(path)) {
+			// Handle error in resolving path, maybe log this condition
+			printk(KERN_ERR "IGLOO ioctl: failed to resolve file path\n");
+		} else {
+			// Log the path and the cmd that led to the -ENOTTY error
+			int hrv;
+			while (1) {
+				hrv = igloo_hypercall2(105, (unsigned long)path, cmd);
+				if (hrv == 1) {
+					// Here, ensure path is logged if needed
+					printk(KERN_INFO "IGLOO ioctl: retry hc- path: %s\n", path);
+					continue;
+				}
+				break;
+			}
+		}
 	}
 	return error;
 }
