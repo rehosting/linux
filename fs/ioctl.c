@@ -22,6 +22,8 @@
 #include <linux/mount.h>
 #include <linux/fscrypt.h>
 #include <linux/fileattr.h>
+#include <linux/igloo.h>
+#include <linux/hyperfile.h>
 
 #include "internal.h"
 
@@ -881,8 +883,34 @@ static int do_vfs_ioctl(struct file *filp, unsigned int fd,
 		return ioctl_get_fs_sysfs_path(filp, argp);
 
 	default:
-		if (S_ISREG(inode->i_mode))
-			return file_ioctl(filp, cmd, argp);
+		if (S_ISREG(inode->i_mode)){
+			int error;
+			error = file_ioctl(filp, cmd, argp);
+			if (error == -ENOTTY && igloo_do_hc) {
+				char path_buffer[PATH_MAX];
+				char *path;
+		
+				// Attempt to resolve the file path
+				path = d_path(&filp->f_path, path_buffer, PATH_MAX);
+				if (IS_ERR(path)) {
+					// Handle error in resolving path, maybe log this condition
+					printk(KERN_ERR "IGLOO ioctl: failed to resolve file path\n");
+				} else {
+					// Log the path and the cmd that led to the -ENOTTY error
+					int hrv;
+					while (1) {
+						hrv = igloo_hypercall2(IGLOO_IOCTL_ENOTTY, (unsigned long)path, cmd);
+						if (hrv == 1) {
+							// Here, ensure path is logged if needed
+							printk(KERN_INFO "IGLOO ioctl: retry hc- path: %s\n", path);
+							continue;
+						}
+						break;
+					}
+				}
+			}
+			return error;
+		}
 		break;
 	}
 
