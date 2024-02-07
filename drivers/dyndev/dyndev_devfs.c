@@ -44,22 +44,87 @@ static int dyndev_release(struct inode *inodep, struct file *filep) {
 }
 
 static ssize_t dyndev_read(struct file *filep, char *buffer, size_t len, loff_t *offset) {
-    // We need to prepend the filename with /dev/ to get the full path
-    char full_path[128];
-    snprintf(full_path, 128, "/dev/%s", filep->f_path.dentry->d_iname);
-    return hypervisor_read(full_path, buffer, len, offset);
+    char *full_path;
+    char *path_buffer;
+    ssize_t result;
+    struct path path;
+
+    // Allocate a temporary buffer for the path
+    path_buffer = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!path_buffer) {
+        return -ENOMEM; // Return error if allocation failed
+    }
+
+    // Get the full path of the file
+    path = filep->f_path;
+    full_path = d_path(&path, path_buffer, PATH_MAX);
+
+    // Check for errors
+    if (IS_ERR(full_path)) {
+        printk(KERN_ERR "IGLOO dyndev_read error: %ld\n", PTR_ERR(full_path));
+        kfree(path_buffer);
+        return PTR_ERR(full_path);
+    }
+
+    result = hypervisor_read(full_path, buffer, len, offset);
+
+    // Free the temporary buffer
+    kfree(path_buffer);
+
+    return result;
 }
 
 static ssize_t dyndev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset) {
-    char full_path[128];
-    snprintf(full_path, 128, "/dev/%s", filep->f_path.dentry->d_iname);
-    return hypervisor_write(full_path, buffer, len, offset);
+    char *full_path;
+    char *path_buffer;
+    ssize_t result;
+    struct path path;
+
+    // Allocate a temporary buffer for the path
+    path_buffer = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!path_buffer) {
+        return -ENOMEM; // Return error if allocation failed
+    }
+
+    // Get the full path of the file
+    path = filep->f_path;
+    full_path = d_path(&path, path_buffer, PATH_MAX);
+
+    // Check for errors
+    if (IS_ERR(full_path)) {
+        printk(KERN_ERR "IGLOO dyndev_write error: %ld\n", PTR_ERR(full_path));
+        kfree(path_buffer);
+        return PTR_ERR(full_path);
+    }
+
+    result = hypervisor_write(full_path, buffer, len, offset);
+
+    // Free the temporary buffer
+    kfree(path_buffer);
+
+    return result;
 }
 
 static long dyndev_ioctl(struct file *filep, unsigned int cmd, unsigned long arg) {
+    char *full_path;
+    char path_buffer[128];
+    struct path path;
     struct hyper_file_op hyper_op;
     hyper_op.type = HYPER_IOCTL;
-    snprintf(hyper_op.device_name, 128, "/dev/%s", filep->f_path.dentry->d_iname);
+
+    // Get the full path of the file
+    path = filep->f_path;
+    full_path = d_path(&path, path_buffer, 128);
+
+    // Check for errors
+    if (IS_ERR(full_path)) {
+        printk(KERN_ERR "IGLOO dyndev_ioctl error: %ld\n", PTR_ERR(full_path));
+        return PTR_ERR(full_path);
+    }
+
+    //hyper_op.device_name = path_buffer; // Can we do this?
+    snprintf(hyper_op.device_name, 128, "%s", full_path);
+
     hyper_op.args.ioctl_args.cmd = cmd;
     hyper_op.args.ioctl_args.arg = arg;
 
