@@ -856,15 +856,45 @@ EXPORT_SYMBOL(file_path);
  * @cred: credentials to use
  */
 int vfs_open(const struct path *path, struct file *file,
-	     const struct cred *cred)
+		const struct cred *cred)
 {
-	struct dentry *dentry = d_real(path->dentry, NULL, file->f_flags);
+    char *buf;
+    char *res_path;
+    int fd;
 
-	if (IS_ERR(dentry))
-		return PTR_ERR(dentry);
+    // Allocate a temporary buffer for the path
+    buf = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!buf) {
+        printk(KERN_ERR "vfs_open: Failed to allocate buffer for path logging\n");
+        return -ENOMEM;
+    }
 
-	file->f_path = *path;
-	return do_dentry_open(file, d_backing_inode(dentry), NULL, cred);
+    // Resolve and log the path before attempting to open
+    res_path = d_path(path, buf, PATH_MAX);
+    if (IS_ERR(res_path)) {
+        printk(KERN_INFO "vfs_open: Path resolution failed or path does not exist: %ld\n", PTR_ERR(res_path));
+        kfree(buf);
+        return PTR_ERR(res_path);
+    }
+
+    // Proceed with opening the file
+    struct dentry *dentry = d_real(path->dentry, NULL, file->f_flags);
+    if (IS_ERR(dentry)) {
+        kfree(buf);
+        return PTR_ERR(dentry);
+    }
+
+    file->f_path = *path;
+    fd = do_dentry_open(file, d_backing_inode(dentry), NULL, cred);
+
+    if (fd < 0) {
+        // Log failure after attempt, using the resolved path
+        //printk(KERN_INFO "vfs_open: Failed to open file: %s, fd=%d\n", res_path, fd);
+		igloo_hypercall2(100, (unsigned long)res_path, (unsigned long)fd);
+    }
+
+    kfree(buf); // Free the buffer allocated for path resolution
+    return fd;
 }
 
 struct file *dentry_open(const struct path *path, int flags,
@@ -889,7 +919,7 @@ struct file *dentry_open(const struct path *path, int flags,
 				fput(f);
 				f = ERR_PTR(error);
 			}
-		} else { 
+		} else {
 			put_filp(f);
 			f = ERR_PTR(error);
 		}
@@ -1036,62 +1066,18 @@ struct file *filp_clone_open(struct file *oldfile)
 }
 EXPORT_SYMBOL(filp_clone_open);
 
-char *resolve_dfd_to_path(int dfd, char *buf, int buflen);
-char *resolve_dfd_to_path(int dfd, char *buf, int buflen) {
-	struct fd f = fdget(dfd);
-	char *path = ERR_PTR(-EBADF);
-
-	if (!f.file) {
-		printk(KERN_ERR "VFS: resolve_dfd_to_path: file is NULL\n");
-		fdput(f);
-		return path;
-	}
-
-	path = file_path(f.file, buf, buflen);
-	fdput(f);
-	return path;
-}
-
 long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 {
 	struct open_flags op;
 	int fd = build_open_flags(flags, mode, &op);
 	struct filename *tmp;
-	char *resolved_path;
-	long error;
 
 	if (fd)
 		return fd;
 
-
 	tmp = getname(filename);
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
-
-    // Allocate memory for resolved_path only when necessary
-    resolved_path = kmalloc(PATH_MAX, GFP_KERNEL);
-    if (!resolved_path) {
-        error = -ENOMEM;
-        goto out_putname;
-    }
-
-    // Handle AT_FDCWD or resolve dfd to a path prefix
-    if (dfd == AT_FDCWD) {
-        // Using getname's result directly avoids unnecessary copy_from_user
-        strlcpy(resolved_path, tmp->name, PATH_MAX);
-    } else {
-        // Resolve the dfd to its absolute path
-        char *path = resolve_dfd_to_path(dfd, resolved_path, PATH_MAX);
-        if (IS_ERR(path)) {
-            error = PTR_ERR(path);
-            goto out_free_resolved;
-        }
-
-        // Concatenate the resolved path with the provided filename
-        if (resolved_path[0] != '\0' && resolved_path[strlen(resolved_path) - 1] != '/')
-            strlcat(resolved_path, "/", PATH_MAX);
-        strlcat(resolved_path, tmp->name, PATH_MAX);
-    }
 
 	fd = get_unused_fd_flags(flags);
 	if (fd >= 0) {
@@ -1104,20 +1090,8 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 			fd_install(fd, f);
 		}
 	}
-
-	// 100 = open/openat with args: open target, resulting fd
-	igloo_hypercall2(100, (unsigned long)resolved_path, (unsigned long)fd);
-
-    kfree(resolved_path);
-    putname(tmp); // Release the name object
-    return fd;
-
-out_free_resolved:
-    kfree(resolved_path);
-
-out_putname:
-    putname(tmp); // Release the name object
-    return error;
+	putname(tmp);
+	return fd;
 }
 
 SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
