@@ -134,7 +134,7 @@ static long dyndev_ioctl(struct file *filep, unsigned int cmd, unsigned long arg
 }
 
 
-
+#if 0
 static void my_vm_open(struct vm_area_struct *vma) {
     struct hyper_file_op* old_hyper_op = vma->vm_private_data;
     //printk(KERN_INFO "dyndev open: virt %lx for hyper_file at %p\n", vma->vm_start, old_hyper_op);
@@ -283,12 +283,13 @@ static int dyndev_mmap(struct file *filp, struct vm_area_struct *vma) {
     // Do not map any pages here. Let the fault handler take care of it.
     return 0;
 }
+#endif
 
 static struct file_operations fops = {
 	.owner =	  THIS_MODULE,
     .open = dyndev_open,
     .read = dyndev_read,
-    .mmap = dyndev_mmap,
+    //.mmap = dyndev_mmap,
     .release = dyndev_release,
     .write = dyndev_write,
     .unlocked_ioctl = dyndev_ioctl,
