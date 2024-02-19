@@ -74,19 +74,25 @@ static int part_read(struct mtd_info *mtd, loff_t from, size_t len,
 	//printk(KERN_ALERT "Reading from MTD device %d from 0x%llx, len:0x%zx. HOOK=%d\n", mtd->index, (unsigned long long)from, len, hook_mtd);
 if (hook_mtd) {
 	// XXX: IGLOO SPECIFIC - use hypercalls for reads of mtd device
-    hyper_op.type = HYPER_READ;
+	hyper_op.type = HYPER_READ;
 	snprintf(hyper_op.device_name, sizeof(hyper_op.device_name), "/dev/mtd%d", mtd->index); // mtd index tells us partition number
 
 
 	// XXX buf is a kernel buffer!
-    hyper_op.args.read_args.buffer = (char*)buf;
-    hyper_op.args.read_args.length = len;
-    hyper_op.args.read_args.offset = from;//*offset;
+	hyper_op.args.read_args.buffer = (char*)buf;
+	hyper_op.args.read_args.length = len;
+	hyper_op.args.read_args.offset = from;//*offset;
 
-    sync_struct(&hyper_op);
+	sync_struct(&hyper_op);
+	//printk(KERN_ALERT "Reading from MTD device %d from 0x%llx, len:0x%zx. HOOK=%d\n", mtd->index, (unsigned long long)from, len, hook_mtd);
 
-    *retlen = hyper_op.rv; // Return the value fetched from the emulator
-	res = 0;
+	if (hyper_op.rv > 0) {
+		*retlen = hyper_op.rv;
+		res = 0;
+	} else {
+		*retlen = 0; // No bytes read
+		res = hyper_op.rv;
+	}
 
 } else {
 	stats = part->master->ecc_stats;
