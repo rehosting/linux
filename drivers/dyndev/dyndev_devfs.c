@@ -363,7 +363,6 @@ int dyndev_init_devfs(char *devnames) {
             // MTD is a special device that we handle with custom code in mtdpart.c
             // We'll set the static bool in our header so it knows to do special stuff
             hook_mtd = true;
-            continue;
         }
 
         device_name[i] = kstrdup(token, GFP_KERNEL);
