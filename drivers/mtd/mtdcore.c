@@ -44,6 +44,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
 #include <linux/dyndev.h>
+#include <linux/hypercall.h>
 
 #include "mtdcore.h"
 extern bool hook_mtd;
@@ -1787,16 +1788,34 @@ EXPORT_SYMBOL_GPL(mtd_kmalloc_up_to);
 
 static int mtd_proc_show(struct seq_file *m, void *v)
 {
-	struct mtd_info *mtd;
+	//struct mtd_info *mtd;
+	char buffer[512] = {0};
+	int rv, i;
 
 	seq_puts(m, "dev:    size   erasesize  name\n");
-	mutex_lock(&mtd_table_mutex);
-	mtd_for_each_device(mtd) {
-		seq_printf(m, "mtd%d: %8.8llx %8.8x \"%s\"\n",
-			   mtd->index, (unsigned long long)mtd->size,
-			   mtd->erasesize, mtd->name);
+	// Let's do a hypercall to ask the emulator to tell us about MTD devices
+	// If it returns 0, we'll break. Otherwise we'll keep calling to populate and report our buffer
+	// Allocate a buffer
+
+	do {
+		rv = igloo_hypercall2(106, (unsigned long)&buffer, sizeof(buffer));
+		if (rv == 1) { // Error - page in and retry
+			volatile int sum = 0;
+			for (i = 0; i < sizeof(buffer); i++) {
+				sum += (int)buffer[i];
+			}
+		}
+	}while (rv == 1);
+	// If we now have a buffer, print it - multiple lines are fine
+	// Expected format:
+	//seq_printf(m, "mtd%d: %8.8llx %8.8x \"%s\"\n",
+	//	   mtd->index, (unsigned long long)mtd->size,
+	//	   mtd->erasesize, mtd->name);
+	if (strlen(buffer) > 0) {
+		seq_puts(m, buffer);
+		memset(buffer, 0, sizeof(buffer));
 	}
-	mutex_unlock(&mtd_table_mutex);
+
 	return 0;
 }
 
