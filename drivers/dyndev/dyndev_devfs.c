@@ -34,12 +34,23 @@ static struct class* my_class  = NULL; // The device-driver class struct pointer
 bool hook_mtd=false; // Set by dyndev, checked by mtdpart
 EXPORT_SYMBOL(hook_mtd);
 
+#define MAX_BUFFER_SIZE 0x100000 // Large buffer size for mmap
 
-static int dyndev_open(struct inode *inodep, struct file *filep) {
-    return 0;
-}
+struct mmap_info {
+    char *buffer; // Pointer to the allocated memory
+    size_t size;  // Size of the buffer
+};
 
-static int dyndev_release(struct inode *inodep, struct file *filep) {
+static int dyndev_open(struct inode *inode, struct file *file) {
+    struct mmap_info *info = kmalloc(sizeof(struct mmap_info), GFP_KERNEL);
+    if (!info)
+        return -ENOMEM;
+
+    // Initialize the buffer or defer its allocation to mmap
+    info->buffer = NULL;
+    info->size = 0; // Or your default size
+
+    file->private_data = info;
     return 0;
 }
 
@@ -285,12 +296,56 @@ static int dyndev_mmap(struct file *filp, struct vm_area_struct *vma) {
 }
 #endif
 
+static int simple_mmap(struct file *file, struct vm_area_struct *vma) {
+    size_t size = vma->vm_end - vma->vm_start;
+    struct mmap_info *info = file->private_data;
+
+    // Check if size exceeds your maximum buffer size limit
+    if (size > MAX_BUFFER_SIZE) // Define MAX_BUFFER_SIZE as needed
+        return -EINVAL;
+
+    // Allocate buffer if not already done, adjusted for larger sizes
+    if (!info->buffer) {
+        info->buffer = vmalloc_user(size); // Adjusted for the requested size
+        if (!info->buffer)
+            return -ENOMEM;
+    }
+
+    // Ensure the VMA is suitable for the mapping
+    vma->vm_flags |= VM_LOCKED | VM_DONTEXPAND | VM_DONTDUMP;
+
+    // Zero out the memory
+    memset(info->buffer, 0, size);
+
+    // Map the buffer to user space, handling larger sizes appropriately
+    if (remap_vmalloc_range(vma, info->buffer, 0))
+        return -EAGAIN;
+
+    return 0;
+}
+
+static int simple_release(struct inode *inode, struct file *file) {
+    struct mmap_info *info = file->private_data;
+
+    if (info) {
+        // Free the allocated buffer, if it exists
+        if (info->buffer) {
+            vfree(info->buffer);
+            info->buffer = NULL;
+        }
+
+        kfree(info);
+        file->private_data = NULL;
+    }
+    return 0;
+}
+
 static struct file_operations fops = {
 	.owner =	  THIS_MODULE,
     .open = dyndev_open,
     .read = dyndev_read,
-    //.mmap = dyndev_mmap,
-    .release = dyndev_release,
+    .mmap = simple_mmap,
+    .release = simple_release,
     .write = dyndev_write,
     .unlocked_ioctl = dyndev_ioctl,
 };
