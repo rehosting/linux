@@ -91,6 +91,7 @@ struct xattr_args;
 #include <linux/quota.h>
 #include <linux/key.h>
 #include <linux/personality.h>
+#include <linux/hypercall.h>
 #include <trace/syscall.h>
 
 #ifdef CONFIG_ARCH_HAS_SYSCALL_WRAPPER
@@ -234,6 +235,59 @@ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
 	SYSCALL_METADATA(sname, x, __VA_ARGS__)			\
 	__SYSCALL_DEFINEx(x, sname, __VA_ARGS__)
 
+#define __IGLOO_STR_SIZE 4096
+
+struct igloo_sysret {
+	s32 nr;
+	s64 args[6];
+	char strings[6][__IGLOO_STR_SIZE];
+	s64 ret;
+} __packed;
+
+// This needs to be wrapped in `({ ... })` and not `do { ... } while (0)`,
+// since for `__MAP()` to work this macro needs to generate an expression
+#define __IGLOO_LOG_SC_ARG(t, a)							\
+	({										\
+		char *igloo_s = igloo_sysret->strings[igloo_i];				\
+		struct file *igloo_file = fget(a);					\
+		igloo_sysret->args[igloo_i] = cpu_to_be64(a);				\
+		if (__builtin_types_compatible_p(t, const char *)) {			\
+			strncpy_from_user(igloo_s, (const char *)a, __IGLOO_STR_SIZE);	\
+		} else if (__builtin_types_compatible_p(t, int) && igloo_file) {	\
+			d_path(&igloo_file->f_path, igloo_s, __IGLOO_STR_SIZE);		\
+		}									\
+		igloo_i++;								\
+	})
+
+#define __IGLOO_SHOULD_LOG_SC(name)					\
+	(								\
+		ret == -ENOENT						\
+		 && __syscall_meta_##name.syscall_nr != __NR_open	\
+		 && __syscall_meta_##name.syscall_nr != __NR_openat	\
+		 && __syscall_meta_##name.syscall_nr != __NR_ioctl	\
+		 && __syscall_meta_##name.syscall_nr != __NR_close	\
+	)
+
+#define __IGLOO_LOG_SC(x, name, ...)					\
+	do {								\
+		int igloo_i = 0;					\
+		struct igloo_sysret *igloo_sysret =			\
+			kzalloc(sizeof(struct igloo_sysret), GFP_KERNEL);\
+		igloo_sysret->nr =					\
+			cpu_to_be32(__syscall_meta_##name.syscall_nr);	\
+		igloo_sysret->ret = cpu_to_be64(ret);			\
+		__MAP(x,__IGLOO_LOG_SC_ARG,__VA_ARGS__);		\
+		igloo_hypercall(0x6408400B, (unsigned long)igloo_sysret);\
+		kfree(igloo_sysret);					\
+	} while (0)
+
+#define __IGLOO_MAYBE_LOG_SC(x, name, ...)				\
+	do {								\
+		if (__IGLOO_SHOULD_LOG_SC(name)) {			\
+			__IGLOO_LOG_SC(x,name,__VA_ARGS__);		\
+		}							\
+	} while (0)
+
 #define __PROTECT(...) asmlinkage_protect(__VA_ARGS__)
 
 /*
@@ -254,6 +308,7 @@ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
 	asmlinkage long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__))	\
 	{								\
 		long ret = __do_sys##name(__MAP(x,__SC_CAST,__VA_ARGS__));\
+		__IGLOO_MAYBE_LOG_SC(x,name,__VA_ARGS__);		\
 		__MAP(x,__SC_TEST,__VA_ARGS__);				\
 		__PROTECT(x, ret,__MAP(x,__SC_ARGS,__VA_ARGS__));	\
 		return ret;						\
