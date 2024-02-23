@@ -228,7 +228,7 @@ struct igloo_sysret {
 		long ret = SYSC##name(__MAP(x,__SC_CAST,__VA_ARGS__));	\
 		int igloo_i = 0;					\
 		struct igloo_sysret *igloo_sysret =			\
-			kmalloc(sizeof(struct igloo_sysret), GFP_KERNEL);\
+			kzalloc(sizeof(struct igloo_sysret), GFP_KERNEL);\
 		igloo_sysret->nr =					\
 			cpu_to_be32(__syscall_meta_##name.syscall_nr);	\
 		igloo_sysret->ret = cpu_to_be64(ret);			\
