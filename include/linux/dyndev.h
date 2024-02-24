@@ -18,18 +18,18 @@ struct hyper_read_args {
     char *buffer;
     size_t length;
     loff_t offset;
-};
+} __packed;
 
 struct hyper_write_args {
     const char *buffer;
     size_t length;
     loff_t offset;
-};
+} __packed;
 
 struct hyper_ioctl_args {
     unsigned int cmd;
     unsigned long arg;
-};
+} __packed;
 
 struct hyper_file_op {
     enum request_type type;
@@ -41,11 +41,7 @@ struct hyper_file_op {
         struct hyper_ioctl_args ioctl_args;
     } args;
     atomic_t refcount;
-};
-
-struct proc_data {
-    char name[128];
-};
+} __packed;
 
 
 static inline void sync_struct(struct hyper_file_op* struct_instance) {
