@@ -76,3 +76,24 @@ ssize_t hypervisor_write(const char *device_name, const char *buffer, size_t len
     kfree(kernel_buffer);
     return ret;
 }
+
+ssize_t hypervisor_write_kernel(const char *device_name, const char *buffer, size_t len, loff_t *offset) {
+    struct hyper_file_op hyper_op;
+    ssize_t ret;
+    printk(KERN_INFO "dyndev: write for device %s\n", device_name);
+
+    hyper_op.type = HYPER_WRITE;
+    strncpy(hyper_op.device_name, device_name, 127);
+    hyper_op.args.write_args.buffer = buffer;
+    hyper_op.args.write_args.length = len;
+    hyper_op.args.write_args.offset = *offset;
+
+    sync_struct(&hyper_op);
+
+    if (hyper_op.rv > 0) {
+        *offset += hyper_op.rv;
+    }
+    ret = hyper_op.rv;
+
+    return ret;
+}
