@@ -56,7 +56,7 @@ static ssize_t sysfs_show(struct kobject *kobj,
 
     ret = hypervisor_read_kernel(full_path, tmpbuf, sizeof(tmpbuf), &off);
     if (ret < 0) {
-        printk(KERN_EMERG "Failed to read from hypervisor for %s\n", full_path);
+        //printk(KERN_EMERG "Failed to read from hypervisor for %s\n", full_path);
         kfree(path);
         kfree(full_path);
         return ret;
