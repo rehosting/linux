@@ -60,7 +60,7 @@ static ssize_t proc_read(struct file *file, char __user *ubuf, size_t count, lof
         return -EINVAL;
     }
 
-    printk(KERN_INFO "dyndev: proc read for %s\n", full_path);
+    //printk(KERN_INFO "dyndev: proc read for %s\n", full_path);
     return hypervisor_read(full_path, ubuf, count, ppos);
 }
 
@@ -72,7 +72,7 @@ static ssize_t proc_write(struct file *file, const char __user *ubuf, size_t cou
         return -EINVAL;
     }
 
-    printk(KERN_INFO "dyndev: proc write for %s\n", full_path);
+    //printk(KERN_INFO "dyndev: proc write for %s\n", full_path);
     return hypervisor_write(full_path, ubuf, count, ppos);
 }
 
