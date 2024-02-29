@@ -46,7 +46,7 @@ struct dyndev_private_info {
 
 static int dyndev_open(struct inode *inode, struct file *file) {
     struct dyndev_private_info *info = kmalloc(sizeof(struct dyndev_private_info), GFP_KERNEL);
-    char* path_buffer;
+    char* path_buffer, *path_ptr;
     struct path path;
 
     if (!info)
@@ -67,12 +67,20 @@ static int dyndev_open(struct inode *inode, struct file *file) {
     // Resolve path
     path.dentry = file->f_path.dentry;
     path.mnt = file->f_path.mnt;
-    info->path = d_path(&path, path_buffer, PATH_MAX);
-    if (IS_ERR(info->path)) {
+    path_ptr = d_path(&path, path_buffer, PATH_MAX);
+    if (IS_ERR(path_ptr)) {
         kfree(path_buffer);
         kfree(info);
         return PTR_ERR(info->path);
     }
+
+    info->path = kmalloc(strlen(path_ptr) + 1, GFP_KERNEL);
+    if (!info->path) {
+        kfree(path_buffer);
+        kfree(info);
+        return -ENOMEM;
+    }
+    strcpy(info->path, path_ptr);
 
     file->private_data = info;
     return 0;
