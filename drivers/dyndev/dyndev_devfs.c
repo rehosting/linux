@@ -294,7 +294,7 @@ static int simple_release(struct inode *inode, struct file *file) {
 
     if (info) {
         // Free the allocated buffer, if it exists
-        vfree(info->path);
+        kfree(info->path);
         if (info->buffer) {
             vfree(info->buffer);
             info->buffer = NULL;
