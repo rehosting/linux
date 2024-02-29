@@ -24,6 +24,8 @@
 #include <linux/dyndev.h>
 
 #include "hyperutils.h"
+#include <linux/mount.h>
+#include <linux/fs.h>
 
 static char **device_name;
 static int *device_major;
@@ -36,13 +38,17 @@ EXPORT_SYMBOL(hook_mtd);
 
 #define MAX_BUFFER_SIZE 0x100000 // Large buffer size for mmap
 
-struct mmap_info {
-    char *buffer; // Pointer to the allocated memory
+struct dyndev_private_info {
+    char *path;
+    char *buffer; // Pointer to the allocated memory for mmap
     size_t size;  // Size of the buffer
 };
 
 static int dyndev_open(struct inode *inode, struct file *file) {
-    struct mmap_info *info = kmalloc(sizeof(struct mmap_info), GFP_KERNEL);
+    struct dyndev_private_info *info = kmalloc(sizeof(struct dyndev_private_info), GFP_KERNEL);
+    char* path_buffer;
+    struct path path;
+
     if (!info)
         return -ENOMEM;
 
@@ -50,100 +56,59 @@ static int dyndev_open(struct inode *inode, struct file *file) {
     info->buffer = NULL;
     info->size = 0; // Or your default size
 
+    // Also update info to store our filename (observed path name
+    // resolution fail with directories later during execution?)
+    path_buffer = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!path_buffer) {
+        kfree(info);
+        return -ENOMEM;
+    }
+
+    // Resolve path
+    path.dentry = file->f_path.dentry;
+    path.mnt = file->f_path.mnt;
+    info->path = d_path(&path, path_buffer, PATH_MAX);
+    if (IS_ERR(info->path)) {
+        kfree(path_buffer);
+        kfree(info);
+        return PTR_ERR(info->path);
+    }
+
     file->private_data = info;
     return 0;
 }
 
 static ssize_t dyndev_read(struct file *filep, char *buffer, size_t len, loff_t *offset) {
-    char *full_path;
-    char *path_buffer;
-    ssize_t result;
-    struct path path;
-
-    // Allocate a temporary buffer for the path
-    path_buffer = kmalloc(PATH_MAX, GFP_KERNEL);
-    if (!path_buffer) {
-        return -ENOMEM; // Return error if allocation failed
-    }
-
-    // Get the full path of the file
-    path = filep->f_path;
-    full_path = d_path(&path, path_buffer, PATH_MAX);
-
-    // Check for errors
-    if (IS_ERR(full_path)) {
-        printk(KERN_ERR "IGLOO dyndev_read error: %ld\n", PTR_ERR(full_path));
-        kfree(path_buffer);
-        return PTR_ERR(full_path);
-    }
-
-    result = hypervisor_read(full_path, buffer, len, offset);
-
-    // Free the temporary buffer
-    kfree(path_buffer);
-
-    return result;
+    struct dyndev_private_info *data = filep->private_data;
+    //printk(KERN_ERR "READ from %s\n", data->path);
+    return hypervisor_read(data->path, buffer, len, offset);
 }
 
 static ssize_t dyndev_write(struct file *filep, const char *buffer, size_t len, loff_t *offset) {
-    char *full_path;
-    char *path_buffer;
-    ssize_t result;
-    struct path path;
-
-    // Allocate a temporary buffer for the path
-    path_buffer = kmalloc(PATH_MAX, GFP_KERNEL);
-    if (!path_buffer) {
-        return -ENOMEM; // Return error if allocation failed
-    }
-
-    // Get the full path of the file
-    path = filep->f_path;
-    full_path = d_path(&path, path_buffer, PATH_MAX);
-
-    // Check for errors
-    if (IS_ERR(full_path)) {
-        printk(KERN_ERR "IGLOO dyndev_write error: %ld\n", PTR_ERR(full_path));
-        kfree(path_buffer);
-        return PTR_ERR(full_path);
-    }
-
-    result = hypervisor_write(full_path, buffer, len, offset);
-
-    // Free the temporary buffer
-    kfree(path_buffer);
-
-    return result;
+    struct dyndev_private_info *data = filep->private_data;
+    //printk(KERN_ERR "WRITE to %s\n", data->path);
+    return hypervisor_write(data->path, buffer, len, offset);
 }
 
 static long dyndev_ioctl(struct file *filep, unsigned int cmd, unsigned long arg) {
-    char *full_path;
-    char path_buffer[128];
-    struct path path;
-    struct hyper_file_op hyper_op;
-    hyper_op.type = HYPER_IOCTL;
+    struct dyndev_private_info *data = filep->private_data;
+    //struct hyper_file_op hyper_op;
+    //hyper_op.type = HYPER_IOCTL;
+    //hyper_op.args.ioctl_args.cmd = cmd;
+    //hyper_op.args.ioctl_args.arg = arg;
+    struct hyper_file_op hyper_op = {
+        .type = HYPER_IOCTL,
+        .args.ioctl_args.cmd = cmd,
+        .args.ioctl_args.arg = arg,
+    };
 
-    // Get the full path of the file
-    path = filep->f_path;
-    full_path = d_path(&path, path_buffer, 128);
-
-    // Check for errors
-    if (IS_ERR(full_path)) {
-        printk(KERN_ERR "IGLOO dyndev_ioctl error: %ld\n", PTR_ERR(full_path));
-        return PTR_ERR(full_path);
-    }
-
+    printk(KERN_ERR "IOCTL on %s\n", data->path);
     //hyper_op.device_name = path_buffer; // Can we do this?
-    snprintf(hyper_op.device_name, 128, "%s", full_path);
-
-    hyper_op.args.ioctl_args.cmd = cmd;
-    hyper_op.args.ioctl_args.arg = arg;
+    snprintf(hyper_op.device_name, 128, "%s", data->path);
 
     sync_struct(&hyper_op);
-
     return hyper_op.rv; // Return the value fetched from the emulator
 }
-
 
 #if 0
 static void my_vm_open(struct vm_area_struct *vma) {
@@ -298,7 +263,7 @@ static int dyndev_mmap(struct file *filp, struct vm_area_struct *vma) {
 
 static int simple_mmap(struct file *file, struct vm_area_struct *vma) {
     size_t size = vma->vm_end - vma->vm_start;
-    struct mmap_info *info = file->private_data;
+    struct dyndev_private_info *info = file->private_data;
 
     // Check if size exceeds your maximum buffer size limit
     if (size > MAX_BUFFER_SIZE) // Define MAX_BUFFER_SIZE as needed
@@ -325,10 +290,11 @@ static int simple_mmap(struct file *file, struct vm_area_struct *vma) {
 }
 
 static int simple_release(struct inode *inode, struct file *file) {
-    struct mmap_info *info = file->private_data;
+    struct dyndev_private_info *info = file->private_data;
 
     if (info) {
         // Free the allocated buffer, if it exists
+        vfree(info->path);
         if (info->buffer) {
             vfree(info->buffer);
             info->buffer = NULL;
