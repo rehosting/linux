@@ -112,7 +112,7 @@ static long dyndev_ioctl(struct file *filep, unsigned int cmd, unsigned long arg
         .args.ioctl_args.arg = arg,
     };
 
-    printk(KERN_ERR "IOCTL on %s\n", data->path);
+    //printk(KERN_ERR "IOCTL on %s\n", data->path);
     //hyper_op.device_name = path_buffer; // Can we do this?
     snprintf(hyper_op.device_name, 128, "%s", data->path);
 
