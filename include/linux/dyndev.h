@@ -4,7 +4,7 @@
 #include <linux/atomic.h>
 #include <linux/printk.h>
 #define HYPER_FILE_OP 0x100200
-#define MAX_DEVICES 64  // Maximum number of devices
+#define MAX_DEVICES 250
 #define MAX_MTD_DEVICES 64  // Maximum number of MTD devices?
 
 enum request_type {
