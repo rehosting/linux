@@ -89,5 +89,5 @@ static void __exit hyperdev_exit(void) {
     printk(KERN_ERR "dyndev module exited.\n");
 }
 
-module_init(hyperdev_init);
+late_initcall(hyperdev_init);
 module_exit(hyperdev_exit);
