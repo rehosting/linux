@@ -399,7 +399,8 @@ int dyndev_init_devfs(char *devnames) {
         device_major[i] = register_chrdev(0, device_name[i], &fops);
         if (device_major[i] < 0) {
             printk(KERN_ALERT "Could not register device %s: %d\n", device_name[i], device_major[i]);
-            return device_major[i];
+            // Skip this device, but keep going
+            continue;
         } else {
             printk(KERN_ALERT "Registered device %s: %d\n", device_name[i], device_major[i]);
             current_dev = MKDEV(device_major[i], 0);
@@ -414,6 +415,9 @@ void dyndev_free_devfs(void) {
     int i;
     dev_t current_dev;
     for (i = 0; i < num_devices; i++) {
+        if (device_major[i] < 0) {
+            continue;
+        }
         current_dev = MKDEV(device_major[i], 0);
         device_destroy(my_class, current_dev);
 
