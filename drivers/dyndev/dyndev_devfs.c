@@ -12,6 +12,7 @@
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/vmalloc.h>
+#include <linux/cdev.h>
 #include <linux/netdevice.h>
 
 #include <linux/mm_types.h>
@@ -27,10 +28,11 @@
 #include <linux/mount.h>
 #include <linux/fs.h>
 
-static char **device_name;
-static int *device_major;
+static int minor;
 static int num_devices = 0;
-
+static struct class *my_class;
+static struct cdev *my_cdevs; // Array of cdev structures
+static int my_major;
 static struct class* my_class  = NULL; // The device-driver class struct pointer
 
 bool hook_mtd=false; // Set by dyndev, checked by mtdpart
@@ -333,7 +335,6 @@ static char *rw_devnode(struct device *dev, umode_t *mode) {
 
 int dyndev_init_devfs(char *devnames) {
     char *str, *token;
-    dev_t current_dev;
     int i=0;
 
     if (!devnames || !(*devnames)) {
@@ -348,64 +349,57 @@ int dyndev_init_devfs(char *devnames) {
         }
     }
     num_devices++; // Add one more for the last (or only) device name
-
     my_class = class_create(THIS_MODULE, "dyndev");
     if (IS_ERR(my_class)) {
+        unregister_chrdev(my_major, "dyndev");
         printk(KERN_ALERT "Dyndev: Failed to create class.\n");
-        return -EINVAL;
+        return PTR_ERR(my_class);
     }
 
     // Ensure device is can be read & written by all users
     my_class->devnode = rw_devnode;
 
-
-    // Allocate memory with error checking for device names and major numbers
-    device_name = kmalloc(sizeof(char*) * num_devices, GFP_KERNEL);
-    if (!device_name) {
-        pr_err("Failed to allocate memory for device_name\n");
+    // Allocate array of cdev structures
+    my_cdevs = kmalloc(sizeof(struct cdev) * num_devices, GFP_KERNEL);
+    if (!my_cdevs) {
+        printk(KERN_ERR "dyndev: Failed to allocate cdevs\n");
         return -ENOMEM;
     }
-    device_major = kmalloc(sizeof(int) * num_devices, GFP_KERNEL);
-    if (!device_major) {
-        pr_err("Failed to allocate memory for device_major\n");
-        kfree(device_name);
-        return -ENOMEM;
+
+    // Allocate and register a single major number for all devices
+    my_major = register_chrdev(0, "dyndev", &fops);
+    if (my_major < 0) {
+        printk(KERN_ERR "dyndev: Failed to register a major number\n");
+        return my_major;
     }
 
     // Now actually tokenize the string
     str = kstrdup(devnames, GFP_KERNEL);
     if (!str) {
         pr_err("Failed to duplicate devnames\n");
-        kfree(device_name);
-        kfree(device_major);
         return -ENOMEM;
     }
 
-    while ((token = strsep(&str, ",")) != NULL) {
+    // Tokenize and create devices
+    while ((token = strsep(&str, ",")) != NULL && i < num_devices) {
+        dev_t devnum;
         if (!(*token)) {  // Check if the token is empty
             // We'll hit this if no device name is provided at all
             continue;
         }
 
-        // If this token is 'mtd' we set a flag and skip
         if (strncmp(token, "mtd", 3) == 0) {
             // MTD is a special device that we handle with custom code in mtdpart.c
             // We'll set the static bool in our header so it knows to do special stuff
             hook_mtd = true;
         }
-
-        device_name[i] = kstrdup(token, GFP_KERNEL);
-        // Initialize device_major[i] appropriately
-        device_major[i] = register_chrdev(0, device_name[i], &fops);
-        if (device_major[i] < 0) {
-            printk(KERN_ALERT "Could not register device %s: %d\n", device_name[i], device_major[i]);
-            // Skip this device, but keep going
+        devnum = MKDEV(my_major, minor++);
+        cdev_init(&my_cdevs[i], &fops);
+        if (cdev_add(&my_cdevs[i], devnum, 1) < 0) {
+            printk(KERN_ERR "dyndev: Failed to add cdev: %s\n", token);
             continue;
-        } else {
-            printk(KERN_ALERT "Registered device %s: %d\n", device_name[i], device_major[i]);
-            current_dev = MKDEV(device_major[i], 0);
-            device_create(my_class, NULL, current_dev, NULL, "%s", device_name[i]);
         }
+        device_create(my_class, NULL, devnum, NULL, "%s", token);
         i++;
     }
     return 0;
@@ -413,19 +407,12 @@ int dyndev_init_devfs(char *devnames) {
 
 void dyndev_free_devfs(void) {
     int i;
-    dev_t current_dev;
     for (i = 0; i < num_devices; i++) {
-        if (device_major[i] < 0) {
-            continue;
-        }
-        current_dev = MKDEV(device_major[i], 0);
-        device_destroy(my_class, current_dev);
-
-        unregister_chrdev(device_major[i], device_name[i]);
-        printk(KERN_INFO "Unregistered device %s\n", device_name[i]);
+        dev_t devnum = MKDEV(my_major, i);
+        device_destroy(my_class, devnum);
+        cdev_del(&my_cdevs[i]);
     }
-
-    // Destroy the class
     class_destroy(my_class);
-    kfree(device_major);
+    unregister_chrdev(my_major, "dyndev");
+    kfree(my_cdevs);
 }

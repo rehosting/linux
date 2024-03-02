@@ -34,7 +34,6 @@ MODULE_DESCRIPTION("Dynamic devices");
 
 static int __init hyperdev_init(void) {
     int rv;
-    pr_emerg("dyndev: Initializing the dyndev module\n");
     char *devnames = kmalloc(ARG_SIZE, GFP_KERNEL);
     char *procnames = kmalloc(ARG_SIZE, GFP_KERNEL);
     char *netdevnames = kmalloc(ARG_SIZE, GFP_KERNEL);
