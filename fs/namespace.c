@@ -2758,7 +2758,7 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	// IGLOOO: Prevent guest from replacing a devtmpfs mount (i.e., don't get rid of our dyndevs!)
 	if (path.dentry->d_sb) { // Check if super_block is present
 		// Check if it's already mounted with devtmpfs
-		if (strcmp(path.dentry->d_sb->s_type->name, "devtmpfs") == 0) {
+		if (strcmp(path.dentry->d_sb->s_type->name, "devtmpfs") == 0 && strcmp(type_page, "dev") != 0) {
 			printk(KERN_INFO "PENGUIN: blocking attempt to remount devtmpfs as %s\n", type_page);
 			retval = 0;
 			goto dput_out;
