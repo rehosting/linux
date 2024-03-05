@@ -619,11 +619,32 @@ static int netlink_create(struct net *net, struct socket *sock, int protocol,
 		netlink_lock_table();
 	}
 #endif
-	if (nl_table[protocol].registered &&
-	    try_module_get(nl_table[protocol].module))
-		module = nl_table[protocol].module;
-	else
-		err = -EPROTONOSUPPORT;
+
+	// Check if the protocol is registered, if not, fallback to NETLINK_SHIM
+	if (!(nl_table[protocol].registered &&
+			try_module_get(nl_table[protocol].module))) {
+#ifdef USE_NETLINK_SHIM
+		if (protocol != NETLINK_SHIM) {
+			printk(KERN_INFO "Requested Netlink protocol %d not supported, falling back to NETLINK_SHIM\n", protocol);
+			protocol = NETLINK_SHIM; // Fallback protocol
+			if (!nl_table[protocol].registered ||
+					!try_module_get(nl_table[protocol].module)) {
+				printk(KERN_ERR "Fallback to NETLINK_SHIM failed\n");
+				err = -EPROTONOSUPPORT;
+				netlink_unlock_table();
+				goto out;
+			}
+		} else {
+#endif
+			err = -EPROTONOSUPPORT;
+			netlink_unlock_table();
+			goto out;
+#ifdef CONFIG_NETLINK_SHIM
+		}
+#endif
+	}
+
+	module = nl_table[protocol].module;
 	cb_mutex = nl_table[protocol].cb_mutex;
 	bind = nl_table[protocol].bind;
 	unbind = nl_table[protocol].unbind;
