@@ -16,6 +16,7 @@
 #include <linux/pagemap.h>
 
 #include <linux/uaccess.h>
+#include <linux/hypercall.h>
 #include <asm/unistd.h>
 
 void generic_fillattr(struct inode *inode, struct kstat *stat)
@@ -114,6 +115,10 @@ retry:
 		goto retry;
 	}
 out:
+	if (error == -ENOENT) {
+		//printk(KERN_ERR "vfs_fstatat: %s: No such file or directory\n", filename);
+		igloo_hypercall(0x6408400B, filename);
+	}
 	return error;
 }
 EXPORT_SYMBOL(vfs_fstatat);
