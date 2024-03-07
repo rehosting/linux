@@ -347,23 +347,6 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
 	return error;
 }
 
-char *resolve_dfd_to_path(int dfd, char *buf, int buflen);
-char *resolve_dfd_to_path(int dfd, char *buf, int buflen) {
-	struct fd f = fdget(dfd);
-	char *path = ERR_PTR(-EBADF);
-
-	if (!f.file) {
-		printk(KERN_ERR "VFS: resolve_dfd_to_path: file is NULL\n");
-		fdput(f);
-		return path;
-	}
-
-	path = file_path(f.file, buf, buflen);
-	fdput(f);
-	return path;
-}
-
-
 /*
  * access() needs to use the real uid/gid, not the effective uid/gid.
  * We do this by temporarily clearing all FS-related capabilities and
@@ -442,43 +425,6 @@ out_path_release:
 out:
 	revert_creds(old_cred);
 	put_cred(override_cred);
-
-	if (res == -ENOENT) {
-		struct filename *tmp;
-		char *resolved_path;
-
-		tmp = getname(filename);
-		if (IS_ERR(tmp))
-			return PTR_ERR(tmp);
-
-		// Allocate memory for resolved_path only when necessary
-		resolved_path = kmalloc(PATH_MAX, GFP_KERNEL);
-		if (!resolved_path) {
-			goto bail;
-		}
-
-		// Handle AT_FDCWD or resolve dfd to a path prefix
-		if (dfd == AT_FDCWD) {
-			// Using getname's result directly avoids unnecessary copy_from_user
-			strlcpy(resolved_path, tmp->name, PATH_MAX);
-		} else {
-			// Resolve the dfd to its absolute path
-			char *path = resolve_dfd_to_path(dfd, resolved_path, PATH_MAX);
-			if (IS_ERR(path)) {
-				goto bail;
-			}
-
-			// Concatenate the resolved path with the provided filename
-			if (resolved_path[0] != '\0' && resolved_path[strlen(resolved_path) - 1] != '/')
-				strlcat(resolved_path, "/", PATH_MAX);
-			strlcat(resolved_path, tmp->name, PATH_MAX);
-		}
-		igloo_hypercall(0x6408400B, (unsigned long)resolved_path);
-
-		kfree(resolved_path);
-		putname(tmp); // Release the name object
-	}
-bail:
 	return res;
 }
 
@@ -1089,6 +1035,22 @@ struct file *filp_clone_open(struct file *oldfile)
 	return file;
 }
 EXPORT_SYMBOL(filp_clone_open);
+
+char *resolve_dfd_to_path(int dfd, char *buf, int buflen);
+char *resolve_dfd_to_path(int dfd, char *buf, int buflen) {
+	struct fd f = fdget(dfd);
+	char *path = ERR_PTR(-EBADF);
+
+	if (!f.file) {
+		printk(KERN_ERR "VFS: resolve_dfd_to_path: file is NULL\n");
+		fdput(f);
+		return path;
+	}
+
+	path = file_path(f.file, buf, buflen);
+	fdput(f);
+	return path;
+}
 
 long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 {
