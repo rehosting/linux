@@ -277,7 +277,7 @@ static struct proc_dir_entry *create_procfs_entry(const char *path, const struct
         if (next_token) {
             // More segments follow, so this should be a directory
             if (!parent || !pde_subdir_find(parent, token, strlen(token))) {
-                printk(KERN_INFO "Creating directory: %s under parent\n", token);
+                //printk(KERN_INFO "Creating directory: %s under parent\n", token);
                 // Directory doesn't exist, so create it
                 parent = proc_mkdir(token, parent);
                 if (!parent) {
@@ -285,13 +285,14 @@ static struct proc_dir_entry *create_procfs_entry(const char *path, const struct
                     kfree(dup_path);
                     return ERR_PTR(-ENOMEM);
                 }
-            } // If directory exists, parent is already set to move into it for the next iteration
+            } else {
+                //printk(KERN_INFO "Directory: %s already exists\n", token);
+                parent = pde_subdir_find(parent, token, strlen(token));
+            }
         } else {
             // This is the last segment; decide based on the context if it's a file or directory
             struct proc_dir_entry *entry = proc_create(token, 0666, parent, proc_fops);
-            if (entry) {
-                printk(KERN_INFO "Created proc file: %s\n", token);
-            } else {
+            if (!entry) {
                 printk(KERN_WARNING "Failed to create proc file: %s\n", token);
             }
             kfree(dup_path);
