@@ -35,8 +35,10 @@ ssize_t hypervisor_read(const char *device_name, char __user *buffer, size_t len
 
     ret = hypervisor_read_kernel(device_name, kernel_buffer, len, offset);
 
-    if (copy_to_user(buffer, kernel_buffer, len)) {
-        ret = -EFAULT;
+    if (ret > 0) { // Check if hypervisor_read_kernel succeeded and returned a positive read value
+        if (copy_to_user(buffer, kernel_buffer, len)) {
+            ret = -EFAULT;
+        }
     }
 
     kfree(kernel_buffer);
