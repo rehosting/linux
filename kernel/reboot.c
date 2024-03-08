@@ -18,6 +18,7 @@
 #include <linux/syscalls.h>
 #include <linux/syscore_ops.h>
 #include <linux/uaccess.h>
+#include <linux/igloo.h>
 
 /*
  * this indicates whether you can reboot with ctrl-alt-del: the default is yes
@@ -281,6 +282,10 @@ static void do_kernel_restart_prepare(void)
  */
 void kernel_restart(char *cmd)
 {
+	if (igloo_block_halt) {
+		printk("IGLOO: refusing to restart\n");
+		return;
+	}
 	kernel_restart_prepare(cmd);
 	do_kernel_restart_prepare();
 	migrate_to_reboot_cpu();
@@ -309,6 +314,10 @@ static void kernel_shutdown_prepare(enum system_states state)
  */
 void kernel_halt(void)
 {
+	if (igloo_block_halt) {
+		printk("IGLOO: refusing to halt\n");
+		return;
+	}
 	kernel_shutdown_prepare(SYSTEM_HALT);
 	migrate_to_reboot_cpu();
 	syscore_shutdown();
@@ -699,6 +708,10 @@ EXPORT_SYMBOL_GPL(kernel_can_power_off);
  */
 void kernel_power_off(void)
 {
+	if (igloo_block_halt) {
+		printk("IGLOO: refusing to power off\n");
+		return;
+	}
 	kernel_shutdown_prepare(SYSTEM_POWER_OFF);
 	do_kernel_power_off_prepare();
 	migrate_to_reboot_cpu();
@@ -725,6 +738,11 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 	struct pid_namespace *pid_ns = task_active_pid_ns(current);
 	char buffer[256];
 	int ret = 0;
+
+	if (igloo_block_halt) {
+		printk("IGLOO: refusing to reboot\n");
+		return -EPERM;
+	}
 
 	/* We only trust the superuser with rebooting the system. */
 	if (!ns_capable(pid_ns->user_ns, CAP_SYS_BOOT))
