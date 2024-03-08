@@ -3,6 +3,7 @@
 
 extern unsigned long igloo_task_size; // mmap.c
 extern bool igloo_do_hc; // mmap.c
+extern bool igloo_block_halt; // reboot.c
 
 #define IGLOO_HYP_KTHREAD_CHANGE 595
 #define IGLOO_HYP_THREAD_CHANGE 596
