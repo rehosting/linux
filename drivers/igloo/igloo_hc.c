@@ -89,6 +89,21 @@ static int __init igloo_hc_init(void) {
 	}
 	return 0;
 }
+bool igloo_block_halt=false;
+
+static int __init early_igloo_block_halt(char *p)
+{
+    unsigned long block_halt;
+    if (kstrtoul(p, 0, &block_halt) < 0 ) {
+        pr_warn("Could not parse igloo_block_halt parameter %s. Set to 0 (default) or 1\n", p);
+        return -1;
+    }
+    igloo_block_halt = (block_halt > 0);
+    pr_warn_once("Using igloo_block_halt: %d\n", igloo_block_halt);
+    return 0;
+}
+
+early_param("igloo_block_halt", early_igloo_block_halt);
 
 /* Unregister probes */
 static void __exit igloo_hc_exit(void) {
