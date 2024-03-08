@@ -38,6 +38,7 @@
 #include <linux/fs_struct.h>
 #include <linux/gfp.h>
 #include <linux/syscore_ops.h>
+#include <linux/igloo.h>
 
 #include <linux/compat.h>
 #include <linux/syscalls.h>
@@ -80,6 +81,22 @@
 #ifndef SET_TSC_CTL
 # define SET_TSC_CTL(a)		(-EINVAL)
 #endif
+
+bool igloo_block_halt;
+
+static int __init early_igloo_block_halt(char *p)
+{
+    unsigned long block_halt;
+    if (kstrtoul(p, 0, &block_halt) < 0 ) {
+        pr_warn("Could not parse igloo_block_halt parameter %s. Set to 0 (default) or 1\n", p);
+        return -1;
+    }
+    igloo_block_halt = (block_halt > 0);
+    pr_warn_once("Using igloo_block_halt: %d\n", igloo_block_halt);
+    return 0;
+}
+
+early_param("igloo_block_halt", early_igloo_block_halt);
 
 /*
  * this is where the system-wide overflow UID and GID are defined, for
@@ -329,6 +346,10 @@ void kernel_restart_prepare(char *cmd)
  */
 void kernel_restart(char *cmd)
 {
+	if (igloo_block_halt) {
+		printk("IGLOO: refusing to restart\n");
+		return;
+	}
 	kernel_restart_prepare(cmd);
 	if (!cmd)
 		printk(KERN_EMERG "Restarting system.\n");
@@ -353,6 +374,10 @@ static void kernel_shutdown_prepare(enum system_states state)
  */
 void kernel_halt(void)
 {
+	if (igloo_block_halt) {
+		printk("IGLOO: refusing to halt\n");
+		return;
+	}
 	kernel_shutdown_prepare(SYSTEM_HALT);
 	sysdev_shutdown();
 	syscore_shutdown();
@@ -370,6 +395,10 @@ EXPORT_SYMBOL_GPL(kernel_halt);
  */
 void kernel_power_off(void)
 {
+	if (igloo_block_halt) {
+		printk("IGLOO: refusing to power off\n");
+		return;
+	}
 	kernel_shutdown_prepare(SYSTEM_POWER_OFF);
 	if (pm_power_off_prepare)
 		pm_power_off_prepare();
@@ -397,6 +426,11 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 {
 	char buffer[256];
 	int ret = 0;
+
+	if (igloo_block_halt) {
+		printk("IGLOO: refusing to reboot\n");
+		return -EPERM;
+	}
 
 	/* We only trust the superuser with rebooting the system. */
 	if (!capable(CAP_SYS_BOOT))
