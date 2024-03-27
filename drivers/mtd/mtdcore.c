@@ -47,7 +47,6 @@
 #include <linux/hypercall.h>
 
 #include "mtdcore.h"
-extern bool hook_mtd;
 
 static struct backing_dev_info *mtd_bdi;
 
@@ -1029,27 +1028,6 @@ int mtd_read(struct mtd_info *mtd, loff_t from, size_t len, size_t *retlen,
 	struct hyper_file_op hyper_op;
 	*retlen = 0;
 
-	if (hook_mtd) {
-		hyper_op.type = HYPER_READ;
-		snprintf(hyper_op.device_name, sizeof(hyper_op.device_name), "/dev/mtd%d", mtd->index); // mtd index tells us partition number
-
-		hyper_op.args.read_args.buffer = (char*)buf; // Kernel buffer?
-		hyper_op.args.read_args.length = len;
-		hyper_op.args.read_args.offset = from;
-
-		sync_struct(&hyper_op);
-
-		if (hyper_op.rv > 0) {
-			*retlen = hyper_op.rv;
-			return 0;
-		} else {
-			*retlen = 0; // No bytes read
-			return hyper_op.rv;
-		}
-	}
-
-
-
 	if (from < 0 || from >= mtd->size || len > mtd->size - from)
 		return -EINVAL;
 	if (!len)
@@ -1097,26 +1075,6 @@ int mtd_panic_write(struct mtd_info *mtd, loff_t to, size_t len, size_t *retlen,
 {
 	struct hyper_file_op hyper_op;
 	*retlen = 0;
-	if (hook_mtd) {
-		hyper_op.type = HYPER_WRITE;
-		snprintf(hyper_op.device_name, sizeof(hyper_op.device_name), "/dev/mtd%d", mtd->index); // mtd index tells us partition number
-
-		hyper_op.args.write_args.buffer = (char*)buf;
-		hyper_op.args.write_args.length = len;
-		hyper_op.args.write_args.offset = to; // *offset
-		printk(KERN_INFO "hyper_op.write device_name = %s, buffer = %s\n", hyper_op.device_name, hyper_op.args.write_args.buffer);
-		sync_struct(&hyper_op);
-		printk(KERN_INFO "hyper_op.rv = %ld\n", hyper_op.rv);
-
-		// Now update the offset ??
-		if (hyper_op.rv > 0) {
-		    *retlen += hyper_op.rv;
-			return 0;
-		}else {
-			*retlen = 0; // No bytes written
-			return hyper_op.rv;
-		}
-	}
 	if (!mtd->_panic_write)
 		return -EOPNOTSUPP;
 	if (to < 0 || to >= mtd->size || len > mtd->size - to)
