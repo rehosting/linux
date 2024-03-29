@@ -2755,10 +2755,9 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	if (retval)
 		return retval;
 
-	// IGLOOO: Prevent guest from replacing a devtmpfs mount (i.e., don't get rid of our dyndevs!)
-	if (type_page && path.dentry->d_sb && path.dentry->d_sb->s_type && path.dentry->d_sb->s_type->name && strncmp("devtmpfs", path.dentry->d_sb->s_type->name, 8) == 0 && strncmp("dev", type_page, 3) != 0) {
-		// Check if it's already mounted with devtmpfs
-		printk(KERN_INFO "Penguin: blocking attempt to remount devtmpfs as %s\n", type_page);
+	// IGLOOO: Prevent guest from replacing a unionfs mount (i.e., don't allow guest to remount /dev after we've set it up for hyperfs)
+	if (type_page && path.dentry->d_sb && path.dentry->d_sb->s_type && path.dentry->d_sb->s_type->name && strncmp("unionfs", path.dentry->d_sb->s_type->name, 8) == 0 && strncmp("dev", type_page, 3) != 0) {
+		printk(KERN_INFO "Penguin: blocking attempt to remount /dev/ as %s\n", type_page);
 		retval = 0;
 		goto dput_out;
 	}
