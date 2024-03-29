@@ -2756,13 +2756,11 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 		return retval;
 
 	// IGLOOO: Prevent guest from replacing a devtmpfs mount (i.e., don't get rid of our dyndevs!)
-	if (path.dentry->d_sb) { // Check if super_block is present
+	if (type_page && path.dentry->d_sb && path.dentry->d_sb->s_type && path.dentry->d_sb->s_type->name && strncmp("devtmpfs", path.dentry->d_sb->s_type->name, 8) == 0 && strncmp("dev", type_page, 3) != 0) {
 		// Check if it's already mounted with devtmpfs
-		if (strcmp(path.dentry->d_sb->s_type->name, "devtmpfs") == 0 && strncmp("dev", type_page, 3) != 0) {
-			printk(KERN_INFO "Penguin: blocking attempt to remount devtmpfs as %s\n", type_page);
-			retval = 0;
-			goto dput_out;
-		}
+		printk(KERN_INFO "Penguin: blocking attempt to remount devtmpfs as %s\n", type_page);
+		retval = 0;
+		goto dput_out;
 	}
 
 	retval = security_sb_mount(dev_name, &path,
