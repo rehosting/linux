@@ -192,7 +192,11 @@ void arch_pick_mmap_layout(struct mm_struct *mm)
 		random_factor = arch_mmap_rnd();
 
 	if (mmap_is_legacy()) {
-		mm->mmap_base = TASK_UNMAPPED_BASE + random_factor;
+		if (igloo_task_size){
+			mm->mmap_base = PAGE_ALIGN((igloo_task_size + SZ_16M)/ 3)  + random_factor;
+		}else{
+			mm->mmap_base = TASK_UNMAPPED_BASE + random_factor;
+		}
 		mm->get_unmapped_area = arch_get_unmapped_area;
 	} else {
 		mm->mmap_base = mmap_base(random_factor);
