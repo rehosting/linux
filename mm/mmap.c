@@ -69,8 +69,21 @@ static int __init early_igloo_task_size(char *p)
     pr_warn_once("Using igloo_task_size: 0x%lx\n", igloo_task_size);
     return 0;
 }
-
 early_param("igloo_task_size", early_igloo_task_size);
+
+bool igloo_do_hc = true;
+static int __init early_igloo_do_hc(char *p)
+{
+    unsigned long do_hc;
+    if (kstrtoul(p, 0, &do_hc) < 0 ) {
+        pr_warn("Could not parse igloo_do_hc parameter %s\n", p);
+        return -1;
+    }
+	igloo_do_hc = (do_hc > 0);
+    pr_warn_once("Using igloo_do_hc: %d\n", igloo_do_hc);
+    return 0;
+}
+early_param("igloo_do_hc", early_igloo_do_hc);
 
 /*
  * WARNING: the debugging will use recursive algorithms so never enable this
