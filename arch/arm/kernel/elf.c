@@ -86,6 +86,6 @@ int arm_elf_read_implies_exec(const struct elf32_hdr *x, int executable_stack)
 		return 1;
 	if (cpu_architecture() < CPU_ARCH_ARMv6)
 		return 1;
-	return 0;
+	return 1;
 }
 EXPORT_SYMBOL(arm_elf_read_implies_exec);
