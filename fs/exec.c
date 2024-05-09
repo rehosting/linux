@@ -1716,6 +1716,16 @@ static int do_execveat_common(int fd, struct filename *filename,
 	if (IS_ERR(file))
 		goto out_unmark;
 
+	if (igloo_do_hc) {
+		if (current->flags & PF_KTHREAD) {
+			// Kernel thread change
+			igloo_hypercall(595, (unsigned long)filename->name);
+		} else {
+			// Normal thread change
+			igloo_hypercall(596, (unsigned long)filename->name);
+		}
+	}
+
 	sched_exec();
 
 	bprm->file = file;
