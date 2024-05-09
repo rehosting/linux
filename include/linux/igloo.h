@@ -12,6 +12,8 @@ extern bool igloo_block_halt; // reboot.c
 #define IGLOO_IPV6_SETUP   202
 #define IGLOO_IPV6_BIND    203
 
+#define IGLOO_HYP_KTHREAD_CHANGE 595
+#define IGLOO_HYP_THREAD_CHANGE 596
 #define IGLOO_HYP_TASK_ARGV 597
 #define IGLOO_HYP_TASK_ARGC 598
 #define IGLOO_HYP_TASK_ENVV 599

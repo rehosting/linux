@@ -1959,6 +1959,14 @@ static int do_execveat_common(int fd, struct filename *filename,
 
 	if (igloo_do_hc) {
 	  mutex_lock(&execve_mutex);		//prevents other kernel threads from issuing interleaved sequences of hypercalls
+
+	  if (current->flags & PF_KTHREAD) {
+		// Kernel thread change
+		igloo_hypercall(IGLOO_HYP_KTHREAD_CHANGE, (unsigned long)filename->name);
+	  } else {
+			// Normal thread change
+		igloo_hypercall(IGLOO_HYP_THREAD_CHANGE, (unsigned long)filename->name);
+	  }
 	  char __user **argv_ptr;
 	  char __user **envp_ptr;
 	  char *arg;
