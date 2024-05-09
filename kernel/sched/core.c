@@ -91,6 +91,7 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 #include <linux/hypercall.h>
+#include <linux/igloo.h>
 
 DEFINE_MUTEX(sched_domains_mutex);
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
@@ -2897,6 +2898,19 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	 */
 	lockdep_unpin_lock(&rq->lock, cookie);
 	spin_release(&rq->lock.dep_map, 1, _THIS_IP_);
+
+	/* Here we just switch the register state and the stack. */
+	if (igloo_do_hc) {
+		igloo_hypercall(590, (unsigned long)next->comm);
+		igloo_hypercall(591, next->tgid);
+		igloo_hypercall(592, next->real_parent->tgid);
+		igloo_hypercall(593, next->start_time);
+		igloo_hypercall(594, (next->flags & PF_KTHREAD) != 0); // Is it a kernel thread?
+		igloo_hypercall(1595, next->real_parent->start_time); // Parent create. XXX shifted 1k
+	}
+
+	// Tell us about the current VMAs
+	if (next->mm) log_mm(next->mm);
 
 	/* Here we just switch the register state and the stack. */
 	switch_to(prev, next, prev);
