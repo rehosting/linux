@@ -91,56 +91,20 @@ static int __init early_igloo_do_hc(char *p)
     return 0;
 }
 early_param("igloo_do_hc", early_igloo_do_hc);
-#include <linux/igloo.h>
-#include <linux/hypercall.h>
 
-void log_mm(struct mm_struct *mm);
-void log_mm(struct mm_struct *mm){
-	// INTROSPECTION VERSION
-	  if (!igloo_do_hc) {
-		return;
-	}
-	struct vm_area_struct *vma;
-	VMA_ITERATOR(vmi, mm, 0);
- 
-	mmap_read_lock(mm);
- 
-	igloo_hypercall(IGLOO_HYP_VMA_REPORT_UPDATE, 1); // Starting VMA report
-
-	for_each_vma(vmi, vma) {
-	/*
-		struct anon_vma *anon_vma = vma->anon_vma;
-		struct anon_vma_chain *avc;
-
-		if (anon_vma) {
-			anon_vma_lock_read(anon_vma);
-			list_for_each_entry(avc, &vma->anon_vma_chain, same_vma)
-				anon_vma_interval_tree_verify(avc);
-			anon_vma_unlock_read(anon_vma);
-		}
-	*/
-
-	  igloo_hypercall(IGLOO_HYP_VMA_VM_START, vma->vm_start);
-	  igloo_hypercall(IGLOO_HYP_VMA_VM_END, vma->vm_end);
-  
-	  if (vma->vm_file != NULL) {
-		  igloo_hypercall(IGLOO_HYP_VMA_NAME, (unsigned long)vma->vm_file->f_path.dentry->d_name.name); // name as pointer
-	  } else if (vma->vm_start < mm->start_brk && vma->vm_end >= mm->brk) {
-		  igloo_hypercall(IGLOO_HYP_VMA_SPECIAL, 1); // name is heap
-	  } else if (vma->vm_start <= mm->start_stack && vma->vm_end >= mm->start_stack) {
-		  igloo_hypercall(IGLOO_HYP_VMA_SPECIAL, 2); // name is stack
-	  } else {
-		  igloo_hypercall(IGLOO_HYP_VMA_SPECIAL, 3); // name is error
-	  }
-
-	  igloo_hypercall(IGLOO_HYP_VMA_REPORT_UPDATE, 2); // Ending this VMA
-
-  }
-
-  igloo_hypercall(IGLOO_HYP_VMA_REPORT_UPDATE, 3); // Ending VMA report
-  mmap_read_unlock(mm);
+bool igloo_log_cov = false;
+static int __init early_igloo_log_cov(char *p)
+{
+    unsigned long log_cov;
+    if (kstrtoul(p, 0, &log_cov) < 0 ) {
+        pr_warn("Could not parse igloo_log_cov parameter %s\n", p);
+        return -1;
+    }
+	igloo_log_cov = (log_cov > 0);
+    pr_warn_once("Using igloo_log_cov: %d\n", igloo_log_cov);
+    return 0;
 }
-
+early_param("igloo_log_cov", early_igloo_log_cov);
 
 #ifdef CONFIG_HAVE_ARCH_MMAP_RND_BITS
 const int mmap_rnd_bits_min = CONFIG_ARCH_MMAP_RND_BITS_MIN;
