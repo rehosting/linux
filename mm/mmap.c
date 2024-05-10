@@ -97,7 +97,7 @@ early_param("igloo_do_hc", early_igloo_do_hc);
 void log_mm(struct mm_struct *mm);
 void log_mm(struct mm_struct *mm){
 	// INTROSPECTION VERSION
-	  if (!igloo_do_hc) {
+	if (!igloo_do_hc || !igloo_log_cov) {
 		return;
 	}
 	struct vm_area_struct *vma;
@@ -108,18 +108,6 @@ void log_mm(struct mm_struct *mm){
 	igloo_hypercall(IGLOO_HYP_VMA_REPORT_UPDATE, 1); // Starting VMA report
 
 	for_each_vma(vmi, vma) {
-	/*
-		struct anon_vma *anon_vma = vma->anon_vma;
-		struct anon_vma_chain *avc;
-
-		if (anon_vma) {
-			anon_vma_lock_read(anon_vma);
-			list_for_each_entry(avc, &vma->anon_vma_chain, same_vma)
-				anon_vma_interval_tree_verify(avc);
-			anon_vma_unlock_read(anon_vma);
-		}
-	*/
-
 	  igloo_hypercall(IGLOO_HYP_VMA_VM_START, vma->vm_start);
 	  igloo_hypercall(IGLOO_HYP_VMA_VM_END, vma->vm_end);
   
@@ -141,6 +129,20 @@ void log_mm(struct mm_struct *mm){
   mmap_read_unlock(mm);
 }
 
+
+bool igloo_log_cov = false;
+static int __init early_igloo_log_cov(char *p)
+{
+    unsigned long log_cov;
+    if (kstrtoul(p, 0, &log_cov) < 0 ) {
+        pr_warn("Could not parse igloo_log_cov parameter %s\n", p);
+        return -1;
+    }
+	igloo_log_cov = (log_cov > 0);
+    pr_warn_once("Using igloo_log_cov: %d\n", igloo_log_cov);
+    return 0;
+}
+early_param("igloo_log_cov", early_igloo_log_cov);
 
 #ifdef CONFIG_HAVE_ARCH_MMAP_RND_BITS
 const int mmap_rnd_bits_min = CONFIG_ARCH_MMAP_RND_BITS_MIN;

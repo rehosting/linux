@@ -66,6 +66,7 @@
 #include <linux/vtime.h>
 #include <linux/wait_api.h>
 #include <linux/workqueue_api.h>
+#include <linux/igloo.h>
 
 #ifdef CONFIG_PREEMPT_DYNAMIC
 # ifdef CONFIG_GENERIC_ENTRY
@@ -5306,6 +5307,8 @@ asmlinkage __visible void schedule_tail(struct task_struct *prev)
 	calculate_sigpending();
 }
 
+extern void log_mm(struct mm_struct *mm);
+
 /*
  * context_switch - switch to the new MM and the new thread's register state.
  */
@@ -5368,6 +5371,19 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	/* Here we just switch the register state and the stack. */
 	switch_to(prev, next, prev);
 	barrier();
+
+	/* Here we just switch the register state and the stack. */
+	if (igloo_do_hc && igloo_log_cov) {
+		igloo_hypercall(IGLOO_HYP_TASK_COMM, (unsigned long)next->comm);
+		igloo_hypercall(IGLOO_HYP_TASK_TGID, next->tgid);
+		igloo_hypercall(IGLOO_HYP_TASK_PTGID, next->real_parent->tgid);
+		igloo_hypercall(IGLOO_HYP_TASK_STIME, next->start_time);
+		igloo_hypercall(IGLOO_HYP_TASK_KTHREAD, (next->flags & PF_KTHREAD) != 0); // Is it a kernel thread?
+		igloo_hypercall(IGLOO_HYP_TASK_PSTIME, next->real_parent->start_time); // Parent create. XXX shifted 1k
+
+		// Tell us about the current VMAs
+		if (next->mm) log_mm(next->mm);
+	}
 
 	return finish_task_switch(prev);
 }
