@@ -3777,8 +3777,8 @@ int path_mount(const char *dev_name, struct path *path,
 	if (flags & MS_NOUSER)
 		return -EINVAL;
 
-	// IGLOOO: Prevent guest from replacing a unionfs mount (i.e., don't allow guest to remount /dev after we've set it up for hyperfs)
-	if (type_page && path->dentry->d_sb && path->dentry->d_sb->s_type && path->dentry->d_sb->s_type->name && strncmp("unionfs", path->dentry->d_sb->s_type->name, 8) == 0 && strncmp("dev", type_page, 3) != 0) {
+	// IGLOOO: Prevent guest from replacing a hyperfs mount (i.e., don't allow guest to remount /dev after we've set it up for hyperfs). Note that when we first see the mount it's called fuse.hperfs, but later it's just called fus.
+	if (type_page && path->dentry->d_sb && path->dentry->d_sb->s_type && path->dentry->d_sb->s_type->name && strncmp("fuse", path->dentry->d_sb->s_type->name, 4) == 0 && strncmp("dev", type_page, 3) != 0) {
 		printk(KERN_INFO "Penguin: blocking attempt to remount /dev/ as %s\n", type_page);
 		return 0;
 	}
