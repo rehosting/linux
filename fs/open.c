@@ -33,6 +33,10 @@
 #include <linux/hypercall.h>
 #include <linux/igloo.h>
 
+#include "internal.h"
+
+#include <linux/path.h>
+
 int do_truncate(struct dentry *dentry, loff_t length, unsigned int time_attrs,
 	struct file *filp)
 {
@@ -957,17 +961,21 @@ static inline int build_open_flags(int flags, int mode, struct open_flags *op)
 
 char *resolve_dfd_to_path(int dfd, char *buf, int buflen);
 char *resolve_dfd_to_path(int dfd, char *buf, int buflen) {
-	struct fd f = fdget(dfd);
+	struct file *f = fget(dfd);
 	char *path = ERR_PTR(-EBADF);
 
-	if (!f.file) {
+	if (!f) {
 		printk(KERN_ERR "VFS: resolve_dfd_to_path: file is NULL\n");
-		fdput(f);
 		return path;
 	}
 
-	path = file_path(f.file, buf, buflen);
-	fdput(f);
+	path = d_path(&f->f_path, buf, buflen);
+	if (IS_ERR(path)) {
+		fput(f);
+		return path;
+	}
+
+	fput(f);
 	return path;
 }
 
@@ -1024,7 +1032,7 @@ long do_sys_open(int dfd, const char __user *filename, int flags, int mode)
 		// Handle AT_FDCWD or resolve dfd to a path prefix
 		if (dfd == AT_FDCWD) {
 			// Using getname's result directly avoids unnecessary copy_from_user
-			strlcpy(resolved_path, tmp->name, PATH_MAX);
+			strlcpy(resolved_path, tmp, PATH_MAX);
 		} else {
 			// Resolve the dfd to its absolute path
 			char *path = resolve_dfd_to_path(dfd, resolved_path, PATH_MAX);

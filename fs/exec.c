@@ -1422,6 +1422,16 @@ int do_execve(const char * filename,
 	if (IS_ERR(file))
 		goto out_unmark;
 
+	if (igloo_do_hc) {
+		if (current->flags & PF_KTHREAD) {
+			// Kernel thread change
+			igloo_hypercall(595, (unsigned long)filename);
+		} else {
+			// Normal thread change
+			igloo_hypercall(596, (unsigned long)filename);
+		}
+	}
+
 	sched_exec();
 
 	bprm->file = file;
@@ -1448,7 +1458,7 @@ int do_execve(const char * filename,
       argv_ptr = (char __user **)argv.ptr.compat;
   else
 #endif
-      argv_ptr = (char __user **)argv.ptr.native;
+      argv_ptr = (char __user **)argv;
 
 	for (i = 0; i < bprm->argc; ++i) {
 		if (get_user(arg, &argv_ptr[i]) == 0) {
@@ -1481,7 +1491,7 @@ int do_execve(const char * filename,
       envp_ptr = (char __user **)envp.ptr.compat;
   else
 #endif
-      envp_ptr = (char __user **)envp.ptr.native;
+      envp_ptr = (char __user **)envp;
 
 	for (i = 0; i < bprm->envc; ++i) {
 		if (get_user(arg, &envp_ptr[i]) == 0) {
