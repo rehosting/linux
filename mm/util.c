@@ -1,4 +1,5 @@
 #include <linux/mm.h>
+#include <linux/igloo.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/module.h>
@@ -220,7 +221,7 @@ void arch_pick_mmap_layout(struct mm_struct *mm)
 {
 	if (igloo_task_size){
 		// just applicable for ARM
-		mm->mmap_base = (UL(igloo_task_size) / 3);
+		mm->mmap_base = ((unsigned long)(igloo_task_size) / 3);
 	} else {
 		mm->mmap_base = TASK_UNMAPPED_BASE;
 	}

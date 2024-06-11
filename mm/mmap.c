@@ -58,7 +58,7 @@ static void unmap_region(struct mm_struct *mm,
 		struct vm_area_struct *vma, struct vm_area_struct *prev,
 		unsigned long start, unsigned long end);
 
-unsigned long igloo_task_size;
+unsigned long igloo_task_size = 0;
 static int __init early_igloo_task_size(char *p)
 {
     unsigned long task_size;
@@ -345,23 +345,30 @@ out:
 
 static long vma_compute_subtree_gap(struct vm_area_struct *vma)
 {
-	unsigned long max, subtree_gap;
-	max = vma->vm_start;
-	if (vma->vm_prev)
-		max -= vma->vm_prev->vm_end;
-	if (vma->vm_rb.rb_left) {
-		subtree_gap = rb_entry(vma->vm_rb.rb_left,
-				struct vm_area_struct, vm_rb)->rb_subtree_gap;
-		if (subtree_gap > max)
-			max = subtree_gap;
-	}
-	if (vma->vm_rb.rb_right) {
-		subtree_gap = rb_entry(vma->vm_rb.rb_right,
-				struct vm_area_struct, vm_rb)->rb_subtree_gap;
-		if (subtree_gap > max)
-			max = subtree_gap;
-	}
-	return max;
+    unsigned long max_gap, gap;
+    max_gap = 0;
+
+    // Compute the gap between the current VMA and the previous one
+    if (vma->vm_prev)
+        max_gap = vma->vm_start - vma->vm_prev->vm_end;
+
+    // Traverse the left subtree
+    if (vma->vm_rb.rb_left) {
+        struct vm_area_struct *left = rb_entry(vma->vm_rb.rb_left, struct vm_area_struct, vm_rb);
+        gap = vma_compute_subtree_gap(left);
+        if (gap > max_gap)
+            max_gap = gap;
+    }
+
+    // Traverse the right subtree
+    if (vma->vm_rb.rb_right) {
+        struct vm_area_struct *right = rb_entry(vma->vm_rb.rb_right, struct vm_area_struct, vm_rb);
+        gap = vma_compute_subtree_gap(right);
+        if (gap > max_gap)
+            max_gap = gap;
+    }
+
+    return max_gap;
 }
 
 void log_mm(struct mm_struct *mm);

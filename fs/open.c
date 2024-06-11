@@ -33,6 +33,10 @@
 #include <linux/hypercall.h>
 #include <linux/igloo.h>
 
+#include "internal.h"
+
+#include <linux/path.h> // 
+
 int do_truncate(struct dentry *dentry, loff_t length, unsigned int time_attrs,
 	struct file *filp)
 {
@@ -957,18 +961,17 @@ static inline int build_open_flags(int flags, int mode, struct open_flags *op)
 
 char *resolve_dfd_to_path(int dfd, char *buf, int buflen);
 char *resolve_dfd_to_path(int dfd, char *buf, int buflen) {
-	struct fd f = fdget(dfd);
-	char *path = ERR_PTR(-EBADF);
+    struct file *file = fget(dfd);
+    char *path = ERR_PTR(-EBADF);
 
-	if (!f.file) {
-		printk(KERN_ERR "VFS: resolve_dfd_to_path: file is NULL\n");
-		fdput(f);
-		return path;
-	}
+    if (!file) {
+        printk(KERN_ERR "VFS: resolve_dfd_to_path: file is NULL\n");
+        return path;
+    }
 
-	path = file_path(f.file, buf, buflen);
-	fdput(f);
-	return path;
+    path = d_path(&file->f_path, buf, buflen);
+    fput(file);
+    return path;
 }
 
 /**
@@ -1004,73 +1007,72 @@ struct file *file_open_root(struct dentry *dentry, struct vfsmount *mnt,
 }
 EXPORT_SYMBOL(file_open_root);
 
-long do_sys_open(int dfd, const char __user *filename, int flags, int mode)
-{
-	struct open_flags op;
-	int lookup = build_open_flags(flags, mode, &op);
-	char *tmp = getname(filename);
-	int fd = PTR_ERR(tmp);
-	char *resolved_path;
-	long error;
+long do_sys_open(int dfd, const char __user *filename, int flags, int mode) {
+    struct open_flags op;
+    int lookup = build_open_flags(flags, mode, &op);
+    char *tmp = getname(filename);
+    int fd = PTR_ERR(tmp);
+    char *resolved_path;
+    long error;
 
-	if (igloo_do_hc) {
-		// Allocate memory for resolved_path only when necessary
-		resolved_path = kmalloc(PATH_MAX, GFP_KERNEL);
-		if (!resolved_path) {
-			error = -ENOMEM;
-			goto out_putname;
-		}
+    if (igloo_do_hc) {
+        // Allocate memory for resolved_path only when necessary
+        resolved_path = kmalloc(PATH_MAX, GFP_KERNEL);
+        if (!resolved_path) {
+            error = -ENOMEM;
+            goto out_putname;
+        }
 
-		// Handle AT_FDCWD or resolve dfd to a path prefix
-		if (dfd == AT_FDCWD) {
-			// Using getname's result directly avoids unnecessary copy_from_user
-			strlcpy(resolved_path, tmp->name, PATH_MAX);
-		} else {
-			// Resolve the dfd to its absolute path
-			char *path = resolve_dfd_to_path(dfd, resolved_path, PATH_MAX);
-			if (IS_ERR(path)) {
-				error = PTR_ERR(path);
-				goto out_free_resolved;
-			}
+        // Handle AT_FDCWD or resolve dfd to a path prefix
+        if (dfd == AT_FDCWD) {
+            // Using getname's result directly avoids unnecessary copy_from_user
+            strlcpy(resolved_path, tmp, PATH_MAX);
+        } else {
+            // Resolve the dfd to its absolute path
+            char *path = resolve_dfd_to_path(dfd, resolved_path, PATH_MAX);
+            if (IS_ERR(path)) {
+                error = PTR_ERR(path);
+                goto out_free_resolved;
+            }
 
-			// Concatenate the resolved path with the provided filename
-			if (resolved_path[0] != '\0' && resolved_path[strlen(resolved_path) - 1] != '/')
-				strlcat(resolved_path, "/", PATH_MAX);
-			strlcat(resolved_path, tmp->name, PATH_MAX);
-		}
-	}
+            // Concatenate the resolved path with the provided filename
+            if (resolved_path[0] != '\0' && resolved_path[strlen(resolved_path) - 1] != '/')
+                strlcat(resolved_path, "/", PATH_MAX);
+            strlcat(resolved_path, tmp, PATH_MAX);
+        }
+    }
 
-	if (!IS_ERR(tmp)) {
-		fd = get_unused_fd_flags(flags);
-		if (fd >= 0) {
-			struct file *f = do_filp_open(dfd, tmp, &op, lookup);
-			if (IS_ERR(f)) {
-				put_unused_fd(fd);
-				fd = PTR_ERR(f);
-			} else {
-				fsnotify_open(f);
-				fd_install(fd, f);
-			}
-		}
-		putname(tmp);
-	}
+    if (!IS_ERR(tmp)) {
+        fd = get_unused_fd_flags(flags);
+        if (fd >= 0) {
+            struct file *f = do_filp_open(dfd, tmp, &op, lookup);
+            if (IS_ERR(f)) {
+                put_unused_fd(fd);
+                fd = PTR_ERR(f);
+            } else {
+                fsnotify_open(f);
+                fd_install(fd, f);
+            }
+        }
+        putname(tmp);
+    }
 
-	if (igloo_do_hc) {
-		// 100 = open/openat with args: open target, resulting fd
-		igloo_hypercall2(100, (unsigned long)resolved_path, (unsigned long)fd);
+    if (igloo_do_hc) {
+        // 100 = open/openat with args: open target, resulting fd
+        igloo_hypercall2(100, (unsigned long)resolved_path, (unsigned long)fd);
 
-		kfree(resolved_path);
-	}
+        kfree(resolved_path);
+    }
 
-	return fd;
+    return fd;
 
-	out_free_resolved:
-		kfree(resolved_path);
-	
-	out_putname:
-		putname(tmp);
-		return error;
-	}
+out_free_resolved:
+    kfree(resolved_path);
+
+out_putname:
+    putname(tmp);
+    return error;
+}
 
 SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, int, mode)
 {

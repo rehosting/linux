@@ -1387,188 +1387,176 @@ EXPORT_SYMBOL(search_binary_handler);
 /*
  * sys_execve() executes a new program.
  */
-int do_execve(const char * filename,
-	const char __user *const __user *argv,
-	const char __user *const __user *envp,
-	struct pt_regs * regs)
+int do_execve(const char *filename,
+              const char __user *const __user *argv,
+              const char __user *const __user *envp,
+              struct pt_regs *regs)
 {
-	struct linux_binprm *bprm;
-	struct file *file;
-	struct files_struct *displaced;
-	bool clear_in_exec;
-	int retval;
+    struct linux_binprm *bprm;
+    struct file *file;
+    struct files_struct *displaced;
+    bool clear_in_exec;
+    int retval;
 
-	retval = unshare_files(&displaced);
-	if (retval)
-		goto out_ret;
+    retval = unshare_files(&displaced);
+    if (retval)
+        goto out_ret;
 
-	retval = -ENOMEM;
-	bprm = kzalloc(sizeof(*bprm), GFP_KERNEL);
-	if (!bprm)
-		goto out_files;
+    retval = -ENOMEM;
+    bprm = kzalloc(sizeof(*bprm), GFP_KERNEL);
+    if (!bprm)
+        goto out_files;
 
-	retval = prepare_bprm_creds(bprm);
-	if (retval)
-		goto out_free;
+    retval = prepare_bprm_creds(bprm);
+    if (retval)
+        goto out_free;
 
-	retval = check_unsafe_exec(bprm);
-	if (retval < 0)
-		goto out_free;
-	clear_in_exec = retval;
-	current->in_execve = 1;
+    retval = check_unsafe_exec(bprm);
+    if (retval < 0)
+        goto out_free;
+    clear_in_exec = retval;
+    current->in_execve = 1;
 
-	file = open_exec(filename);
-	retval = PTR_ERR(file);
-	if (IS_ERR(file))
-		goto out_unmark;
+    file = open_exec(filename);
+    retval = PTR_ERR(file);
+    if (IS_ERR(file))
+        goto out_unmark;
 
-	sched_exec();
+    sched_exec();
 
-	bprm->file = file;
-	bprm->filename = filename;
-	bprm->interp = filename;
+    bprm->file = file;
+    bprm->filename = filename;
+    bprm->interp = filename;
 
-	retval = bprm_mm_init(bprm);
-	if (retval)
-		goto out_file;
+    retval = bprm_mm_init(bprm);
+    if (retval)
+        goto out_file;
 
-	bprm->argc = count(argv, MAX_ARG_STRINGS);
-	if ((retval = bprm->argc) < 0)
-		goto out;
+    bprm->argc = count(argv, MAX_ARG_STRINGS);
+    if ((retval = bprm->argc) < 0)
+        goto out;
 
-	mutex_lock(&execve_mutex);		//prevents other kernel threads from issuing interleaved sequences of hypercalls
+    mutex_lock(&execve_mutex); // prevents other kernel threads from issuing interleaved sequences of hypercalls
 
-  if (igloo_do_hc) {
-    char __user **argv_ptr;
-    char *arg;
-    char arg_buf[256];
-    int i;
-#ifdef CONFIG_COMPAT
-  if (argv.is_compat)
-      argv_ptr = (char __user **)argv.ptr.compat;
-  else
-#endif
-      argv_ptr = (char __user **)argv.ptr.native;
+    if (igloo_do_hc) {
+        char __user **argv_ptr;
+        char *arg;
+        char arg_buf[256];
+        int i;
 
-	for (i = 0; i < bprm->argc; ++i) {
-		if (get_user(arg, &argv_ptr[i]) == 0) {
-			if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
-				//printk(KERN_CRIT "Arg %d: %s\n", i, arg_buf);
-				igloo_hypercall2(597, (unsigned long) arg_buf, i);	//do a hypercall with each argv buffer and associated index
-			}
-		}
-	}
-	igloo_hypercall(598, bprm->argc);
-  }
+        argv_ptr = (char __user **)argv;
 
+        for (i = 0; i < bprm->argc; ++i) {
+            if (get_user(arg, &argv_ptr[i]) == 0) {
+                if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
+                    // printk(KERN_CRIT "Arg %d: %s\n", i, arg_buf);
+                    igloo_hypercall2(597, (unsigned long)arg_buf, i); // do a hypercall with each argv buffer and associated index
+                }
+            }
+        }
+        igloo_hypercall(598, bprm->argc);
+    }
 
-	bprm->envc = count(envp, MAX_ARG_STRINGS);
-	if ((retval = bprm->envc) < 0) {
-		printk(KERN_CRIT "EXITING BEFORE ENVP ENUMERATION\n");
-		mutex_unlock(&execve_mutex);		//unlock the mutex in case of early exit
-		goto out;
-	}
+    bprm->envc = count(envp, MAX_ARG_STRINGS);
+    if ((retval = bprm->envc) < 0) {
+        printk(KERN_CRIT "EXITING BEFORE ENVP ENUMERATION\n");
+        mutex_unlock(&execve_mutex); // unlock the mutex in case of early exit
+        goto out;
+    }
 
+    if (igloo_do_hc) {
+        char __user **envp_ptr;
+        char *arg;
+        char arg_buf[256];
+        int i;
 
-   if (igloo_do_hc) {
-    char __user **envp_ptr;
-    char *arg;
-    char arg_buf[256];
-    int i;
+        envp_ptr = (char __user **)envp;
 
-#ifdef CONFIG_COMPAT
-  if (envp.is_compat)
-      envp_ptr = (char __user **)envp.ptr.compat;
-  else
-#endif
-      envp_ptr = (char __user **)envp.ptr.native;
+        for (i = 0; i < bprm->envc; ++i) {
+            if (get_user(arg, &envp_ptr[i]) == 0) {
+                if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
+                    // printk(KERN_CRIT "Env %d: %s\n", i, arg_buf);
+                    igloo_hypercall2(599, (unsigned long)arg_buf, i); // do a hypercall with each envp buffer and associated index
+                }
+            }
+        }
+        igloo_hypercall(600, bprm->envc);
+    }
 
-	for (i = 0; i < bprm->envc; ++i) {
-		if (get_user(arg, &envp_ptr[i]) == 0) {
-			if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
-				//printk(KERN_CRIT "Env %d: %s\n", i, arg_buf);
-				igloo_hypercall2(599, (unsigned long) arg_buf, i);	//do a hypercall with each envp buffer and associated index
-			}
-		}
-	}
-	igloo_hypercall(600, bprm->envc);
-   }
+    retval = prepare_binprm(bprm);
+    if (retval < 0)
+        goto out;
 
+    // the creds are set in the call to prepare_binprm above
+    // printk(KERN_CRIT "EUID: %u, EGID: %u\n", bprm->cred->euid.val, bprm->cred->egid.val);
+    igloo_hypercall(601, bprm->cred->euid);
+    igloo_hypercall(602, bprm->cred->egid);
 
-	retval = prepare_binprm(bprm);
-	if (retval < 0)
-		goto out;
+    mutex_unlock(&execve_mutex);
 
-	//the creds are set in the call to prepare_binprm above
-	//printk(KERN_CRIT "EUID: %u, EGID: %u\n", bprm->cred->euid.val, bprm->cred->egid.val);
-	igloo_hypercall(601, bprm->cred->euid.val);
-	igloo_hypercall(602, bprm->cred->egid.val);
+    retval = copy_strings_kernel(1, &bprm->filename, bprm);
+    if (retval < 0)
+        goto out;
 
-	mutex_unlock(&execve_mutex);
+    bprm->exec = bprm->p;
+    retval = copy_strings(bprm->envc, envp, bprm);
+    if (retval < 0)
+        goto out;
 
-	retval = copy_strings_kernel(1, &bprm->filename, bprm);
-	if (retval < 0)
-		goto out;
+    retval = copy_strings(bprm->argc, argv, bprm);
+    if (retval < 0)
+        goto out;
 
-	bprm->exec = bprm->p;
-	retval = copy_strings(bprm->envc, envp, bprm);
-	if (retval < 0)
-		goto out;
+    retval = search_binary_handler(bprm, regs);
+    if (retval < 0)
+        goto out;
 
-	retval = copy_strings(bprm->argc, argv, bprm);
-	if (retval < 0)
-		goto out;
-
-	retval = search_binary_handler(bprm,regs);
-	if (retval < 0)
-		goto out;
-
-	/* execve succeeded */
-	current->fs->in_exec = 0;
-	current->in_execve = 0;
-	acct_update_integrals(current);
-	free_bprm(bprm);
-	if (displaced)
-		put_files_struct(displaced);
-	return retval;
+    /* execve succeeded */
+    current->fs->in_exec = 0;
+    current->in_execve = 0;
+    acct_update_integrals(current);
+    free_bprm(bprm);
+    if (displaced)
+        put_files_struct(displaced);
+    return retval;
 
 out:
-	if (bprm->mm) {
-		acct_arg_size(bprm, 0);
-		mmput(bprm->mm);
-	}
+    if (bprm->mm) {
+        acct_arg_size(bprm, 0);
+        mmput(bprm->mm);
+    }
 
 out_file:
-	if (bprm->file) {
-		allow_write_access(bprm->file);
-		fput(bprm->file);
-	}
+    if (bprm->file) {
+        allow_write_access(bprm->file);
+        fput(bprm->file);
+    }
 
 out_unmark:
-	if (clear_in_exec)
-		current->fs->in_exec = 0;
-	current->in_execve = 0;
+    if (clear_in_exec)
+        current->fs->in_exec = 0;
+    current->in_execve = 0;
 
 out_free:
-	free_bprm(bprm);
+    free_bprm(bprm);
 
 out_files:
-	if (displaced)
-		reset_files_struct(displaced);
+    if (displaced)
+        reset_files_struct(displaced);
 out_ret:
-	return retval;
+    return retval;
 }
 
 void set_binfmt(struct linux_binfmt *new)
 {
-	struct mm_struct *mm = current->mm;
+    struct mm_struct *mm = current->mm;
 
-	if (mm->binfmt)
-		module_put(mm->binfmt->module);
+    if (mm->binfmt)
+        module_put(mm->binfmt->module);
 
-	mm->binfmt = new;
-	if (new)
-		__module_get(new->module);
+    mm->binfmt = new;
+    if (new)
+        __module_get(new->module);
 }
 
 EXPORT_SYMBOL(set_binfmt);
