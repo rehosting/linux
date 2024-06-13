@@ -86,6 +86,20 @@ static int __init early_igloo_do_hc(char *p)
 }
 early_param("igloo_do_hc", early_igloo_do_hc);
 
+bool igloo_log_cov = false;
+static int __init early_igloo_log_cov(char *p)
+{
+    unsigned long log_cov;
+    if (kstrtoul(p, 0, &log_cov) < 0 ) {
+        pr_warn("Could not parse igloo_log_cov parameter %s\n", p);
+        return -1;
+    }
+	igloo_log_cov = (log_cov > 0);
+    pr_warn_once("Using igloo_log_cov: %d\n", igloo_log_cov);
+    return 0;
+}
+early_param("igloo_log_cov", early_igloo_log_cov);
+
 /*
  * WARNING: the debugging will use recursive algorithms so never enable this
  * unless you know what you are doing.
@@ -376,39 +390,27 @@ void log_mm(struct mm_struct *mm) {
   // INTROSPECTION VERSION
 	struct vm_area_struct *vma = mm->mmap;
 
-	if (!igloo_do_hc) {
+	if (!igloo_do_hc || !igloo_log_cov) {
 		return;
 	}
 
 	igloo_hypercall(5910, 1); // Starting VMA report
 
 	while (vma) {
-    /*
-		struct anon_vma *anon_vma = vma->anon_vma;
-		struct anon_vma_chain *avc;
+		igloo_hypercall(5911, vma->vm_start);
+		igloo_hypercall(5912, vma->vm_end);
 
-		if (anon_vma) {
-			anon_vma_lock_read(anon_vma);
-			list_for_each_entry(avc, &vma->anon_vma_chain, same_vma)
-				anon_vma_interval_tree_verify(avc);
-			anon_vma_unlock_read(anon_vma);
+		if (vma->vm_file != NULL) {
+		igloo_hypercall(5913, (unsigned long)vma->vm_file->f_path.dentry->d_name.name); // name as pointer
+		} else if (vma->vm_start < mm->start_brk && vma->vm_end >= mm->brk) {
+		igloo_hypercall(5914, 1); // name is heap
+		} else if (vma->vm_start <= mm->start_stack && vma->vm_end >= mm->start_stack) {
+		igloo_hypercall(5914, 2); // name is stack
+		} else {
+		igloo_hypercall(5914, 3); // name is error
 		}
-    */
 
-    igloo_hypercall(5911, vma->vm_start);
-    igloo_hypercall(5912, vma->vm_end);
-
-    if (vma->vm_file != NULL) {
-      igloo_hypercall(5913, (unsigned long)vma->vm_file->f_path.dentry->d_name.name); // name as pointer
-    } else if (vma->vm_start < mm->start_brk && vma->vm_end >= mm->brk) {
-      igloo_hypercall(5914, 1); // name is heap
-    } else if (vma->vm_start <= mm->start_stack && vma->vm_end >= mm->start_stack) {
-      igloo_hypercall(5914, 2); // name is stack
-    } else {
-      igloo_hypercall(5914, 3); // name is error
-    }
-
-  igloo_hypercall(5910, 2); // Ending this VMA
+		igloo_hypercall(5910, 2); // Ending this VMA
 
 		vma = vma->vm_next;
 	}
