@@ -93,6 +93,9 @@ struct sched_param {
 
 #include <asm/processor.h>
 
+#include <linux/hypercall.h>
+#include <linux/igloo.h>
+
 struct exec_domain;
 struct futex_pi_state;
 struct robust_list_head;
