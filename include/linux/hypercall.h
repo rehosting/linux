@@ -9,8 +9,8 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
 
     asm volatile(
        "movz $0, $0, $0"
-        : "+r"(a0)  // Input and output in R0
-        : "r"(v0), // num in register v0
+        : "+r"(v0)  // Input and output in R0
+        : "r"(a0), // num in register v0
         : // No clobber
     );
 
@@ -66,11 +66,11 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
 
     asm volatile(
        "movz $0, $0, $0"
-        : "+r"(a0)  // Input and output in R0
-        : "r"(a1) , "r" (v0)// arg2 in register A1
+        : "+r"(v0)  // Input and output in R0
+        : "r"(a0) , "r" (a1)// arg2 in register A1
         : // No clobber
     );
-    return a0;
+    return v0;
 
 #else
     #error "No igloo_hypercall2 support for architecture"
