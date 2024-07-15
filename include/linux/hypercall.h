@@ -17,12 +17,12 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
 
 #elif defined(CONFIG_ARM) || defined(CONFIG_ARM64)
   #if defined(CONFIG_ARM64)
-    register uint32_t reg0 asm("x8") = num;
-    register uint32_t reg1 asm("x0") = arg1;
+    register uint64_t reg0 asm("x8") = num;
+    register uint64_t reg1 asm("x0") = arg1;
     asm volatile(
             "msr S0_0_c5_c0_0, xzr \n"
-            : "+r"(reg1) // Input and output
-            : "r"(reg0)
+            :
+            : "r"(reg0), "r"(reg1)
             : // No clobber
         );
   #else
@@ -47,9 +47,9 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
 static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long arg1, unsigned long arg2) {
 #if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
    #if defined(CONFIG_ARM64)
-    register uint32_t reg0 asm("x8") = num;
-    register uint32_t reg1 asm("x0") = arg1;
-    register uint32_t reg2 asm("x1") = arg2;
+    register uint64_t reg0 asm("x8") = num;
+    register uint64_t reg1 asm("x0") = arg1;
+    register uint64_t reg2 asm("x1") = arg2;
     asm volatile(
        "msr S0_0_c5_c0_0, xzr \n"
         : "+r"(reg1)  // Input and output
@@ -60,7 +60,7 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
   #else
     register uint32_t reg0 asm("r7") = num;
     register uint32_t reg1 asm("r0") = arg1;
-    register uint32_t reg2 asm("r0") = arg2;
+    register uint32_t reg2 asm("r1") = arg2;
 
     asm volatile(
        "mcr p7, 0, r0, c0, c0, 0"
