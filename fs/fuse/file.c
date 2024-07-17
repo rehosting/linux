@@ -2499,26 +2499,7 @@ long fuse_do_ioctl(struct file *file, unsigned int cmd, unsigned long arg,
 	if (!pages || !iov_page)
 		goto out;
 
-	/*
-	 * If restricted, initialize IO parameters as encoded in @cmd.
-	 * RETRY from server is not allowed.
-	 */
-	if (!(flags & FUSE_IOCTL_UNRESTRICTED)) {
-		struct iovec *iov = iov_page;
-
-		iov->iov_base = (void __user *)arg;
-		iov->iov_len = _IOC_SIZE(cmd);
-
-		if (_IOC_DIR(cmd) & _IOC_WRITE) {
-			in_iov = iov;
-			in_iovs = 1;
-		}
-
-		if (_IOC_DIR(cmd) & _IOC_READ) {
-			out_iov = iov;
-			out_iovs = 1;
-		}
-	}
+	// TODO: IGLOO: Revert the commit that added this line after using CUSE for pseudofiles
 
  retry:
 	inarg.in_size = in_size = iov_length(in_iov, in_iovs);
