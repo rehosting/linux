@@ -30,6 +30,7 @@
 #include <linux/perf_event.h>
 #include <linux/audit.h>
 #include <linux/khugepaged.h>
+#include <linux/igloo.h>
 
 #include <asm/uaccess.h>
 #include <asm/cacheflush.h>
@@ -46,9 +47,30 @@
 #define arch_rebalance_pgtables(addr, len)		(addr)
 #endif
 
+#ifdef CONFIG_HAVE_ARCH_MMAP_RND_BITS
+const int mmap_rnd_bits_min = CONFIG_ARCH_MMAP_RND_BITS_MIN;
+const int mmap_rnd_bits_max = CONFIG_ARCH_MMAP_RND_BITS_MAX;
+int mmap_rnd_bits __read_mostly = CONFIG_ARCH_MMAP_RND_BITS;
+#endif
+
 static void unmap_region(struct mm_struct *mm,
 		struct vm_area_struct *vma, struct vm_area_struct *prev,
 		unsigned long start, unsigned long end);
+
+
+unsigned long igloo_task_size = 0;
+static int __init early_igloo_task_size(char *p)
+{
+    unsigned long task_size;
+    if (kstrtoul(p, 0, &task_size) < 0 ) {
+        pr_warn("Could not parse igloo_task_size parameter %s\n", p);
+        return -1;
+    }
+    igloo_task_size = task_size;
+    pr_warn_once("Using igloo_task_size: 0x%lx\n", igloo_task_size);
+    return 0;
+}
+early_param("igloo_task_size", early_igloo_task_size);
 
 /*
  * WARNING: the debugging will use recursive algorithms so never enable this

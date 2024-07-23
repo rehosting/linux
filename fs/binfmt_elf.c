@@ -32,6 +32,7 @@
 #include <linux/elf.h>
 #include <linux/utsname.h>
 #include <linux/coredump.h>
+#include <linux/igloo.h>
 #include <asm/uaccess.h>
 #include <asm/param.h>
 #include <asm/page.h>
@@ -731,8 +732,14 @@ static int load_elf_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	   change some of these later */
 	current->mm->free_area_cache = current->mm->mmap_base;
 	current->mm->cached_hole_size = 0;
-	retval = setup_arg_pages(bprm, randomize_stack_top(STACK_TOP),
+	
+	if (igloo_task_size) {
+		retval = setup_arg_pages(bprm, randomize_stack_top(igloo_task_size),
 				 executable_stack);
+	} else {
+		retval = setup_arg_pages(bprm, randomize_stack_top(STACK_TOP),
+                                 executable_stack);
+	}
 	if (retval < 0) {
 		send_sig(SIGKILL, current, 0);
 		goto out_free_dentry;

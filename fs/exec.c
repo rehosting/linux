@@ -55,6 +55,7 @@
 #include <linux/fs_struct.h>
 #include <linux/pipe_fs_i.h>
 #include <linux/oom.h>
+#include <linux/igloo.h>
 
 #include <asm/uaccess.h>
 #include <asm/mmu_context.h>
@@ -1091,6 +1092,12 @@ void setup_new_exec(struct linux_binprm * bprm)
 	 * some architectures like powerpc
 	 */
 	current->mm->task_size = TASK_SIZE;
+	
+	//Begin for igloo: if we moved the stack, we have to move mmap
+	if(igloo_task_size)
+		current->mm->task_size = igloo_task_size;
+	//End for igloo
+	
 
 	/* install the new credentials */
 	if (bprm->cred->uid != current_euid() ||

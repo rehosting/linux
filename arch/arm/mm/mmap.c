@@ -9,6 +9,7 @@
 #include <linux/io.h>
 #include <linux/personality.h>
 #include <linux/random.h>
+#include <linux/igloo.h>
 #include <asm/cputype.h>
 #include <asm/system.h>
 

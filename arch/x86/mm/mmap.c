@@ -29,6 +29,7 @@
 #include <linux/random.h>
 #include <linux/limits.h>
 #include <linux/sched.h>
+#include <linux/igloo.h>
 #include <asm/elf.h>
 
 static unsigned int stack_maxrandom_size(void)
@@ -103,7 +104,11 @@ static unsigned long mmap_base(void)
 	else if (gap > MAX_GAP)
 		gap = MAX_GAP;
 
-	return PAGE_ALIGN(TASK_SIZE - gap - mmap_rnd());
+	if (igloo_task_size) {
+		return PAGE_ALIGN(igloo_task_size - gap - rnd);
+	} else {
+		return PAGE_ALIGN(TASK_SIZE - gap - mmap_rnd());
+	}
 }
 
 /*
