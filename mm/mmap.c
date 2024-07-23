@@ -31,6 +31,7 @@
 #include <linux/audit.h>
 #include <linux/khugepaged.h>
 #include <linux/igloo.h>
+#include <linux/hypercall.h>
 
 #include <asm/uaccess.h>
 #include <asm/cacheflush.h>
@@ -341,6 +342,80 @@ out:
 	retval = mm->brk;
 	up_write(&mm->mmap_sem);
 	return retval;
+}
+
+
+static long vma_compute_subtree_gap(struct vm_area_struct *vma)
+{
+    unsigned long max_gap, gap;
+    max_gap = 0;
+
+    // Compute the gap between the current VMA and the previous one
+    if (vma->vm_prev)
+        max_gap = vma->vm_start - vma->vm_prev->vm_end;
+
+    // Traverse the left subtree
+    if (vma->vm_rb.rb_left) {
+        struct vm_area_struct *left = rb_entry(vma->vm_rb.rb_left, struct vm_area_struct, vm_rb);
+        gap = vma_compute_subtree_gap(left);
+        if (gap > max_gap)
+            max_gap = gap;
+    }
+
+    // Traverse the right subtree
+    if (vma->vm_rb.rb_right) {
+        struct vm_area_struct *right = rb_entry(vma->vm_rb.rb_right, struct vm_area_struct, vm_rb);
+        gap = vma_compute_subtree_gap(right);
+        if (gap > max_gap)
+            max_gap = gap;
+    }
+
+    return max_gap;
+}
+
+void log_mm(struct mm_struct *mm);
+void log_mm(struct mm_struct *mm) {
+  // INTROSPECTION VERSION
+	struct vm_area_struct *vma = mm->mmap;
+
+	if (!igloo_do_hc) {
+		return;
+	}
+
+	igloo_hypercall(5910, 1); // Starting VMA report
+
+	while (vma) {
+    /*
+		struct anon_vma *anon_vma = vma->anon_vma;
+		struct anon_vma_chain *avc;
+
+		if (anon_vma) {
+			anon_vma_lock_read(anon_vma);
+			list_for_each_entry(avc, &vma->anon_vma_chain, same_vma)
+				anon_vma_interval_tree_verify(avc);
+			anon_vma_unlock_read(anon_vma);
+		}
+    */
+
+    igloo_hypercall(5911, vma->vm_start);
+    igloo_hypercall(5912, vma->vm_end);
+
+    if (vma->vm_file != NULL) {
+      igloo_hypercall(5913, (unsigned long)vma->vm_file->f_path.dentry->d_name.name); // name as pointer
+    } else if (vma->vm_start < mm->start_brk && vma->vm_end >= mm->brk) {
+      igloo_hypercall(5914, 1); // name is heap
+    } else if (vma->vm_start <= mm->start_stack && vma->vm_end >= mm->start_stack) {
+      igloo_hypercall(5914, 2); // name is stack
+    } else {
+      igloo_hypercall(5914, 3); // name is error
+    }
+
+  igloo_hypercall(5910, 2); // Ending this VMA
+
+		vma = vma->vm_next;
+	}
+
+  igloo_hypercall(5910, 3); // Ending VMA report
 }
 
 #ifdef DEBUG_MM_RB

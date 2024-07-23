@@ -56,6 +56,8 @@
 #include <linux/pipe_fs_i.h>
 #include <linux/oom.h>
 #include <linux/igloo.h>
+#include <linux/hypercall.h>
+#include <linux/uaccess.h>
 
 #include <asm/uaccess.h>
 #include <asm/mmu_context.h>
@@ -77,6 +79,7 @@ static atomic_t call_count = ATOMIC_INIT(1);
 
 static LIST_HEAD(formats);
 static DEFINE_RWLOCK(binfmt_lock);
+DEFINE_MUTEX(execve_mutex);
 
 int __register_binfmt(struct linux_binfmt * fmt, int insert)
 {
@@ -1435,13 +1438,87 @@ int do_execve(const char * filename,
 	if ((retval = bprm->argc) < 0)
 		goto out;
 
+	mutex_lock(&execve_mutex);
+
+	if (igloo_do_hc) {
+		char __user **argv_ptr;
+		char *arg;
+		char arg_buf[256];
+		int i;
+#ifdef CONFIG_COMPAT
+//if (argv.is_compat)
+//      argv_ptr = (char __user **)argv.ptr.compat;
+	printk(KERN_INFO "ARGV CONFIG COMPAT WE HAVE ISSUES NO COMPAT PL0X");
+//  else
+#endif
+//      argv_ptr = (char __user **)argv.ptr.native;
+	argv_ptr = (char __user **)argv;
+	printk(KERN_INFO "IDK WHATS GOING ON ANYMORE PLEASE");
+	for (i = 0; i < bprm->argc; ++i) {
+		if (get_user(arg, &argv_ptr[i]) == 0) {
+			if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
+				//printk(KERN_CRIT "Arg %d: %s\n", i, arg_buf);
+				igloo_hypercall2(597, (unsigned long) arg_buf, i);	//do a hypercall with each argv buffer and associated index
+			}
+		}
+	}
+	printk(KERN_INFO "POST ARGV STUFF");
+	igloo_hypercall(598, bprm->argc);
+  }
+
 	bprm->envc = count(envp, MAX_ARG_STRINGS);
-	if ((retval = bprm->envc) < 0)
+	if ((retval = bprm->envc) < 0){
+		printk(KERN_CRIT "EXITING BEFORE ENVP ENUMERATION\n");
+		mutex_unlock(&execve_mutex);		//unlock the mutex in case of early exit
 		goto out;
+	}
+
+	printk(KERN_INFO "WE HERE");
+if (igloo_do_hc) {
+    char __user **envp_ptr;
+    char *arg;
+    char arg_buf[256];
+    int i;
+
+#ifdef CONFIG_COMPAT
+//  if (envp.is_compat)
+//      envp_ptr = (char __user **)envp.ptr.compat;
+//  else
+	printk(KERN_INFO "ENVP CONFIG COMPAT");
+#endif
+//      envp_ptr = (char __user **)envp.ptr.native;
+	envp_ptr = (char __user **)envp;
+	printk(KERN_INFO "AFTER ENVP_PTR SET");
+	for (i = 0; i < bprm->envc; ++i) {
+		if (get_user(arg, &envp_ptr[i]) == 0) {
+			if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
+				//printk(KERN_CRIT "Env %d: %s\n", i, arg_buf);
+				igloo_hypercall2(599, (unsigned long) arg_buf, i);	//do a hypercall with each envp buffer and associated index
+			}
+		}
+	}
+	printk(KERN_INFO "AFTER ENVP_PTR STUFF");
+	igloo_hypercall(600, bprm->envc);
+   }
+
 
 	retval = prepare_binprm(bprm);
 	if (retval < 0)
 		goto out;
+
+	//the creds are set in the call to prepare_binprm above
+	printk(KERN_INFO "EUID: %u, EGID: %u\n", bprm->cred->euid, bprm->cred->egid);
+	printk(KERN_INFO "EUID: %u, EGID: %u\n", current->cred->uid, current->cred->gid);
+//	igloo_hypercall(601, bprm->cred->euid);
+//	igloo_hypercall(602, bprm->cred->egid);
+	
+	if(igloo_do_hc) {
+	printk(KERN_INFO "PREHYPERCALLS");
+	igloo_hypercall(601, current->cred->uid);
+	igloo_hypercall(602, current->cred->gid);
+	printk(KERN_INFO "POST HYPERCALLS");
+	}
+	mutex_unlock(&execve_mutex);
 
 	retval = copy_strings_kernel(1, &bprm->filename, bprm);
 	if (retval < 0)

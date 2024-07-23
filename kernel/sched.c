@@ -71,6 +71,7 @@
 #include <linux/ctype.h>
 #include <linux/ftrace.h>
 #include <linux/slab.h>
+#include <linux/hypercall.h>
 
 #include <asm/tlb.h>
 #include <asm/irq_regs.h>
@@ -2945,6 +2946,8 @@ asmlinkage void schedule_tail(struct task_struct *prev)
 	if (current->set_child_tid)
 		put_user(task_pid_vnr(current), current->set_child_tid);
 }
+
+extern void log_mm(struct mm_struct *m);
 
 /*
  * context_switch - switch to the new MM and the new
