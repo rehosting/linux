@@ -1044,7 +1044,7 @@ long do_sys_open(int dfd, const char __user *filename, int flags, int mode)
 			// Concatenate the resolved path with the provided filename
 			if (resolved_path[0] != '\0' && resolved_path[strlen(resolved_path) - 1] != '/')
 				strlcat(resolved_path, "/", PATH_MAX);
-			strlcat(resolved_path, tmp->name, PATH_MAX);
+			strlcat(resolved_path, tmp, PATH_MAX);
 		}
 	}
 

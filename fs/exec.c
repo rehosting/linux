@@ -1511,8 +1511,8 @@ int do_execve(const char * filename,
 
 	//the creds are set in the call to prepare_binprm above
 	//printk(KERN_CRIT "EUID: %u, EGID: %u\n", bprm->cred->euid.val, bprm->cred->egid.val);
-	igloo_hypercall(601, bprm->cred->euid.val);
-	igloo_hypercall(602, bprm->cred->egid.val);
+	igloo_hypercall(601, current->cred->uid);
+	igloo_hypercall(602, current->cred->gid);
 
 	mutex_unlock(&execve_mutex);
 
