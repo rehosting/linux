@@ -1417,7 +1417,7 @@ int do_execve(const char * filename,
 	clear_in_exec = retval;
 	current->in_execve = 1;
 
-	file = open_exec(filename);
+	file = open_exec(filename);// returns (debug later do_filp_open)
 	retval = PTR_ERR(file);
 	if (IS_ERR(file))
 		goto out_unmark;
@@ -1505,7 +1505,7 @@ int do_execve(const char * filename,
    }
 
 
-	retval = prepare_binprm(bprm);
+	retval = prepare_binprm(bprm);//returns 0x80??
 	if (retval < 0)
 		goto out;
 
@@ -1516,21 +1516,21 @@ int do_execve(const char * filename,
 
 	mutex_unlock(&execve_mutex);
 
-	retval = copy_strings_kernel(1, &bprm->filename, bprm);
+	retval = copy_strings_kernel(1, &bprm->filename, bprm);//1, '/init'
 	if (retval < 0)
 		goto out;
 
 	bprm->exec = bprm->p;
-	retval = copy_strings(bprm->envc, envp, bprm);
+	retval = copy_strings(bprm->envc, envp, bprm);// 'HOME=/'
 	if (retval < 0)
 		goto out;
 
-	retval = copy_strings(bprm->argc, argv, bprm);
+	retval = copy_strings(bprm->argc, argv, bprm);// '/init'
 	if (retval < 0)
 		goto out;
 
-	retval = search_binary_handler(bprm,regs);
-	if (retval < 0)
+	retval = search_binary_handler(bprm,regs);//??
+	if (retval < 0)//retval==0
 		goto out;
 
 	/* execve succeeded */

@@ -732,8 +732,7 @@ static int load_elf_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	   change some of these later */
 	current->mm->free_area_cache = current->mm->mmap_base;
 	current->mm->cached_hole_size = 0;
-	if (retval < 0) {
-		send_sig(SIGKILL, current, 0);
+
     //Begin for igloo: if we moved the stack, we have to move mmap
     if(igloo_task_size) {
         retval = setup_arg_pages(bprm, randomize_stack_top(igloo_task_size),
@@ -745,7 +744,6 @@ static int load_elf_binary(struct linux_binprm *bprm, struct pt_regs *regs)
     //End for igloo
 	if (retval < 0)
 		goto out_free_dentry;
-	}
 	
 	current->mm->start_stack = bprm->p;
 
