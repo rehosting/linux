@@ -24,7 +24,7 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
             : "r"(reg0)
             : // No clobber
         );
-  #elif defined(CONFIG_ARM) 
+#elif defined(CONFIG_ARM) 
     register unsigned long reg0 asm("r7") = num;
     register unsigned long reg1 asm("r0") = arg1;
 
@@ -34,6 +34,16 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
       : "r"(reg0)
       :
   );  
+#elif defined(CONFIG_X86_64)
+    register unsigned long reg0 asm("rax") = num;
+    register unsigned long reg1 asm("rdi") = arg1;
+
+    asm volatile(
+        "cpuid"
+        : "+r"(reg0)           // hypercall num + return value in rax
+        : "r"(reg1)            // arguments
+        : // No clobber
+    );
 #else
 #error "No igloo_hypercall support for architecture"
 #endif
@@ -79,7 +89,19 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
         : // No clobber
     );
     return reg0;
+#elif defined(CONFIG_X86_64)
+    register unsigned long reg0 asm("rax") = num;
+    register unsigned long reg1 asm("rdi") = arg1;
+    register unsigned long reg2 asm("rsi") = arg2;
 
+    asm volatile(
+        "cpuid"
+        : "+r"(reg0)           // hypercall num + return value in rax
+        : "r"(reg1), "r"(reg2) // arguments
+        : // No clobber
+    );
+
+    return reg0;
 #else
     #error "No igloo_hypercall2 support for architecture"
 #endif
