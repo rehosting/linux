@@ -3,5 +3,6 @@
 
 extern unsigned long igloo_task_size; // mmap.c
 extern bool igloo_do_hc; //mmap.c
+extern bool igloo_block_halt;
 
 #endif 
