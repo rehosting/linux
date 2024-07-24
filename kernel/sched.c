@@ -72,6 +72,7 @@
 #include <linux/ftrace.h>
 #include <linux/slab.h>
 #include <linux/hypercall.h>
+#include <linux/igloo.h>
 
 #include <asm/tlb.h>
 #include <asm/irq_regs.h>
@@ -2990,11 +2991,22 @@ context_switch(struct rq *rq, struct task_struct *prev,
 #ifndef __ARCH_WANT_UNLOCKED_CTXSW
 	spin_release(&rq->lock.dep_map, 1, _THIS_IP_);
 #endif
+	
+	switch_to(prev, next, prev);
+        barrier();
 
 	/* Here we just switch the register state and the stack. */
-	switch_to(prev, next, prev);
+	if (igloo_do_hc) {
+		igloo_hypercall(590, (unsigned long)next->comm);
+		igloo_hypercall(591, next->tgid);
+		igloo_hypercall(592, next->real_parent->tgid);
+		igloo_hypercall(593, (unsigned long)next->start_time.tv_nsec);
+		igloo_hypercall(594, (next->flags & PF_KTHREAD) != 0); // Is it a kernel thread?
+		igloo_hypercall(1595, next->real_parent->start_time.tv_nsec); // Parent create. XXX shifted 1k
 
-	barrier();
+		if (next->mm) log_mm(next->mm);
+	}
+
 	/*
 	 * this_rq must be evaluated again because prev may have moved
 	 * CPUs since it called schedule(), thus the 'rq' on its stack

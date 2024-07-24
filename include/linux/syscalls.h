@@ -258,6 +258,7 @@ struct igloo_sysret {
 		igloo_i++;								\
 	})
 
+#ifndef CONFIG_ARM64
 #define __IGLOO_SHOULD_LOG_SC(name)					\
 	(								\
 		ret == -ENOENT						\
@@ -266,6 +267,12 @@ struct igloo_sysret {
  		&& __syscall_meta_##name.syscall_nr != __NR_ioctl	\
  		&& __syscall_meta_##name.syscall_nr != __NR_close	\
 	)
+#else
+#define __IGLOO_SHOULD_LOG_SC(name)     \
+	( 				\
+		ret == -ENOENT 		\
+	)
+#endif
 
 #define __IGLOO_LOG_SC(x, name, ...)					\
 	do {								\

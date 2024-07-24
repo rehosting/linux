@@ -26,6 +26,16 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
       : "r"(r0), "r"(r1)
       :
   );
+#elif defined(CONFIG_ARM64)
+    register unsigned long x0 asm("x0") = num;
+    register unsigned long x1 asm("x1") = arg1;
+
+    asm volatile(
+	"msr S0_0_c5_c0_0, xzr \n"
+        : "+r"(x0) // Input and output
+        : "r"(x1)
+        : // No clobber
+    );
 #else
 #error "No igloo_hypercall support for architecture"
 #endif
@@ -45,7 +55,19 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
     );
 
     return r0;
+#elif defined(CONFIG_ARM64)
+    register unsigned long x0 asm("x0") = num;
+    register unsigned long x1 asm("x1") = arg1;
+    register unsigned long x2 asm("x2") = arg2;
 
+    asm volatile(
+	"msr S0_0_c5_c0_0, xzr \n"
+        : "+r"(x0) // Input and output
+        : "r"(x1), "r"(x2)
+        : // No clobber
+    );
+
+    return x0;
 #elif defined(CONFIG_MIPS)
     register unsigned long a0 asm("a0") = num;
     register unsigned long a1 asm("a1") = arg1;
