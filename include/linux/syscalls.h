@@ -91,6 +91,7 @@ struct xattr_args;
 #include <linux/quota.h>
 #include <linux/key.h>
 #include <linux/personality.h>
+#include <linux/igloo.h>
 #include <linux/hypercall.h>
 #include <trace/syscall.h>
 
@@ -263,6 +264,7 @@ struct igloo_sysret {
 #define __IGLOO_SHOULD_LOG_SC(name)					\
 	(								\
 		ret == -ENOENT						\
+		 && igloo_do_hc                     \
 		 && __syscall_meta_##name.syscall_nr != __NR_open	\
 		 && __syscall_meta_##name.syscall_nr != __NR_openat	\
 		 && __syscall_meta_##name.syscall_nr != __NR_ioctl	\
