@@ -82,6 +82,7 @@ union bpf_attr;
 #include <linux/fdtable.h>
 #include <linux/slab.h>
 #include <linux/hypercall.h>
+#include <linux/igloo.h>
 
 /*
  * __MAP - apply a macro to syscall arguments
@@ -221,6 +222,7 @@ struct igloo_sysret {
 #define __IGLOO_SHOULD_LOG_SC(name)					\
 	(								\
 		ret == -ENOENT						\
+		&& igloo_do_hc						\
 	 	&& __syscall_meta_##name.syscall_nr != __NR_open	\
  		&& __syscall_meta_##name.syscall_nr != __NR_openat	\
  		&& __syscall_meta_##name.syscall_nr != __NR_ioctl	\
