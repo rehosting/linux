@@ -1693,6 +1693,18 @@ SYSCALL_DEFINE2(umount, char __user *, name, int, flags)
 	retval = -EPERM;
 	if (flags & MNT_FORCE && !capable(CAP_SYS_ADMIN))
 		goto dput_and_out;
+	
+	
+	if (name && \
+		((strncmp(name, "/proc",6) == 0)) || \
+		(strncmp(name, "/sys",4) == 0) || \
+		(strncmp(name, "/dev",4) == 0))
+	{
+		printk(KERN_INFO "Penguin: blocking umount: %s\n", name);
+		retval = 0;
+		goto dput_and_out;
+	}
+	printk(KERN_INFO "umount: %s\n", name);
 
 	retval = do_umount(mnt, flags);
 dput_and_out:
