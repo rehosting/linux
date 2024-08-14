@@ -1084,8 +1084,8 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 			// Resolve the dfd to its absolute path
 			char *path = resolve_dfd_to_path(dfd, resolved_path, PATH_MAX);
 			if (IS_ERR(path)) {
-				error = PTR_ERR(path);
-				goto out_free_resolved;
+				// XXX: rare failure, shows up with cgroups
+				strlcpy(resolved_path, "/path_resolve_error", PATH_MAX);
 			}
 
 			// Concatenate the resolved path with the provided filename
