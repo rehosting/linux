@@ -3777,10 +3777,27 @@ int path_mount(const char *dev_name, struct path *path,
 	if (flags & MS_NOUSER)
 		return -EINVAL;
 
-	// IGLOOO: Prevent guest from replacing a hyperfs mount (i.e., don't allow guest to remount /dev after we've set it up for hyperfs). Note that when we first see the mount it's called fuse.hperfs, but later it's just called fus.
-	if (type_page && path->dentry->d_sb && path->dentry->d_sb->s_type && path->dentry->d_sb->s_type->name && strncmp("fuse", path->dentry->d_sb->s_type->name, 4) == 0 && strncmp("dev", type_page, 3) != 0) {
-		printk(KERN_INFO "Penguin: blocking attempt to remount /dev/ as %s\n", type_page);
-		return 0;
+	// IGLOOO: Prevent guest from replacing a hyperfs mount (i.e., don't allow guest to remount /dev after we've set it up for hyperfs). Note that when we first see the mount it's called fuse.hperfs, but later it's just called fuse.
+	/* Check if it's a remount attempt on /dev */
+	if (path.dentry && path.dentry->d_sb && path.dentry->d_sb->s_type &&
+		path.dentry->d_sb->s_type->name && path.dentry->d_name.name) {
+
+		const char *mount_type = path.dentry->d_sb->s_type->name;
+		const char *mount_point = path.dentry->d_name.name;
+
+		//printk(KERN_INFO "Penguin: Current mount - point: %s, type: %s\n",
+		//       mount_point, mount_type);
+
+		if (strcmp(mount_point, "dev") == 0 &&
+			strncmp("fuse", mount_type, 4) == 0 &&
+			type_page && strncmp("dev", type_page, 3) != 0) {
+
+			//printk(KERN_INFO "Penguin: Blocking attempt to remount /dev as %s\n", type_page);
+			retval = 0;  // Pretend it was okay
+			goto dput_out;
+		}
+	//} else {
+		//printk(KERN_WARNING "Penguin: Incomplete mount information\n");
 	}
 
 	ret = security_sb_mount(dev_name, path, type_page, flags, data_page);
