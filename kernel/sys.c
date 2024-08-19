@@ -61,6 +61,7 @@
 #include <asm/io.h>
 #include <asm/unistd.h>
 
+
 #ifndef SET_UNALIGN_CTL
 # define SET_UNALIGN_CTL(a, b)	(-EINVAL)
 #endif
@@ -1138,13 +1139,57 @@ static int override_release(char __user *release, size_t len)
 	return ret;
 }
 
+void make_igloo_utsname(char *buf, struct new_utsname __user *name){
+	char *token, *str;
+	char *array[6];
+	int result;
+
+	str = kstrdup(buf, GFP_KERNEL);
+
+	int i = 0;
+	while ((token = strsep(&str, ",")) != NULL){
+		array[i] = kstrdup(token, GFP_KERNEL);
+
+		if (strcmp(array[i], "none") == 0) {
+			i++;
+			continue;
+		}
+
+		if (i == 0)
+			result = copy_to_user(name->sysname, array[i], sizeof(char) * 65);
+		else if (i == 1)
+			result = copy_to_user(name->nodename, array[i], sizeof(char) * 65);
+		else if (i == 2)
+			result = copy_to_user(name->release, array[i], sizeof(char) * 65);
+		else if (i == 3)
+			result = copy_to_user(name->version, array[i], sizeof(char) * 65);
+		else if (i == 4)
+			result = copy_to_user(name->machine, array[i], sizeof(char) * 65);
+		else if (i == 5)
+			result = copy_to_user(name->domainname, array[i], sizeof(char) * 65);
+
+		i += 1;
+	}
+
+	if (result) {
+		printk(KERN_ERR "Failed to copy igloo uname data to user space\n");
+	}
+
+}
+
 SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 {
 	int errno = 0;
+	char buf[395];
 
 	down_read(&uts_sem);
 	if (copy_to_user(name, utsname(), sizeof *name))
 		errno = -EFAULT;
+
+	if (igloo_do_hc) {
+		igloo_hypercall(300, (unsigned long)&buf);
+		make_igloo_utsname(buf, name);
+	}
 	up_read(&uts_sem);
 
 	if (!errno && override_release(name->release, sizeof(name->release)))
