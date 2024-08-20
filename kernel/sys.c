@@ -1181,14 +1181,28 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 {
 	int errno = 0;
 	char buf[395];
+	int rv, i, idx;
+	volatile int x;
 
 	down_read(&uts_sem);
 	if (copy_to_user(name, utsname(), sizeof *name))
 		errno = -EFAULT;
 
 	if (igloo_do_hc) {
-		igloo_hypercall(300, (unsigned long)&buf);
-		make_igloo_utsname(buf, name);
+		for (i = 0; i < 10; i++) { 
+			rv = igloo_hypercall2(300, (unsigned long)&buf, 0);
+			if (rv != 0xDEADBEEF)
+				break;
+
+			x = 0;
+			for(idx = 0; idx < sizeof(buf); idx++){
+				x += (int)buf[idx];
+			}
+		}
+		if (rv == 0)
+			make_igloo_utsname(buf, name);
+		else
+			printk(KERN_INFO "Failed to create custom igloo utsname string");
 	}
 	up_read(&uts_sem);
 
