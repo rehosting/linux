@@ -1199,10 +1199,12 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 				x += (int)buf[idx];
 			}
 		}
-		if (rv == 1)
+		if (rv == 1){
 			make_igloo_utsname(buf, name);
-		else
-			printk_once(KERN_INFO "Failed to create custom igloo utsname string");
+		} else {
+			if (rv != 0xABCDABCD)
+				printk_once(KERN_INFO "Failed to create custom igloo utsname string");
+		}
 	}
 	up_read(&uts_sem);
 
