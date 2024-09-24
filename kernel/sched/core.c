@@ -2903,16 +2903,13 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	switch_to(prev, next, prev);
 	barrier();
 
-	/* Here we just switch the register state and the stack. */
 	if (igloo_do_hc && igloo_log_cov) {
 		igloo_hypercall(590, (unsigned long)next->comm);
 		igloo_hypercall(591, next->tgid);
-		if (next->real_parent) 
-			igloo_hypercall(592, next->real_parent->tgid);
+		igloo_hypercall(592, next->real_parent ?  next->real_parent->tgid : 0)
 		igloo_hypercall(593, next->start_time);
 		igloo_hypercall(594, (next->flags & PF_KTHREAD) != 0); // Is it a kernel thread?
-		if (next->real_parent) 
-			igloo_hypercall(1595, next->real_parent->start_time); // Parent create. XXX shifted 1k
+		igloo_hypercall(1595, next->real_parent ? next->real_parent->start_time : 0); // Parent create. XXX shifted 1k
 
 		// Tell us about the current VMAs
 		if (next->mm) log_mm(next->mm);
