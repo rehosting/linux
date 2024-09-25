@@ -2912,7 +2912,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 		igloo_hypercall(1595, next->real_parent ? next->real_parent->start_time : 0); // Parent create. XXX shifted 1k
 
 		// Tell us about the current VMAs
-		if (next->mm) log_mm(next->mm);
+		if (!IS_ERR_OR_NULL(next->mm)) log_mm(next->mm);
 	}
 
 	return finish_task_switch(prev);
