@@ -2906,7 +2906,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	if (igloo_do_hc && igloo_log_cov) {
 		igloo_hypercall(590, (unsigned long)next->comm);
 		igloo_hypercall(591, next->tgid);
-		igloo_hypercall(592, next->real_parent ?  next->real_parent->tgid : 0)
+		igloo_hypercall(592, next->real_parent ?  next->real_parent->tgid : 0);
 		igloo_hypercall(593, next->start_time);
 		igloo_hypercall(594, (next->flags & PF_KTHREAD) != 0); // Is it a kernel thread?
 		igloo_hypercall(1595, next->real_parent ? next->real_parent->start_time : 0); // Parent create. XXX shifted 1k
