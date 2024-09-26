@@ -2773,6 +2773,20 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 			//printk(KERN_INFO "Penguin: Blocking attempt to remount /dev as %s\n", type_page);
 			retval = 0;  // Pretend it was okay
 			goto dput_out;
+		} else if (strcmp(mount_point, "sys") == 0 &&
+			strncmp("fuse", mount_type, 4) == 0 &&
+			type_page && strncmp("sys", type_page, 3) != 0) {
+
+			//printk(KERN_INFO "Penguin: Blocking attempt to remount /sys as %s\n", type_page);
+			retval = 0;  // Pretend it was okay
+			goto dput_out;
+		} else if (strcmp(mount_point, "proc") == 0 &&
+			strncmp("fuse", mount_type, 4) == 0 &&
+			type_page && strncmp("proc", type_page, 4) != 0) {
+
+			//printk(KERN_INFO "Penguin: Blocking attempt to remount /proc as %s\n", type_page);
+			retval = 0;  // Pretend it was okay
+			goto dput_out;
 		}
 	//} else {
 		//printk(KERN_WARNING "Penguin: Incomplete mount information\n");
