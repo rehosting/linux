@@ -317,15 +317,16 @@ static long vma_compute_subtree_gap(struct vm_area_struct *vma)
 void log_mm(struct mm_struct *mm);
 void log_mm(struct mm_struct *mm) {
   // INTROSPECTION VERSION
-	struct vm_area_struct *vma = mm->mmap;
+	struct vm_area_struct *vma;
 
 	if (!igloo_do_hc || !igloo_log_cov) {
 		return;
 	}
 
 	igloo_hypercall(5910, 1); // Starting VMA report
-
-	while (vma) {
+	
+	down_read(&mm->mmap_sem);
+	for (vma = mm->mmap; vma; vma = vma->vm_next){
 		igloo_hypercall(5911, vma->vm_start);
 		igloo_hypercall(5912, vma->vm_end);
 
@@ -338,11 +339,9 @@ void log_mm(struct mm_struct *mm) {
 		} else {
 		igloo_hypercall(5914, 3); // name is error
 		}
-
 		igloo_hypercall(5910, 2); // Ending this VMA
-
-		vma = vma->vm_next;
 	}
+	up_read(&mm->mmap_sem);
 
   igloo_hypercall(5910, 3); // Ending VMA report
 }
