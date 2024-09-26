@@ -3794,6 +3794,17 @@ int path_mount(const char *dev_name, struct path *path,
 
 			//printk(KERN_INFO "Penguin: Blocking attempt to remount /dev as %s\n", type_page);
 			return 0; // pretend it was ok
+		} else if (strcmp(mount_point, "sys") == 0 &&
+			strncmp("fuse", mount_type, 4) == 0 &&
+			type_page && strncmp("sys", type_page, 3) != 0) {
+
+			//printk(KERN_INFO "Penguin: Blocking attempt to remount /sys as %s\n", type_page);
+			return 0;
+		} else if (strcmp(mount_point, "proc") == 0 &&
+			   strncmp("fuse", mount_type, 4) == 0 && type_page &&
+			   strncmp("proc", type_page, 4) != 0) {
+			//printk(KERN_INFO "Penguin: Blocking attempt to remount /proc as %s\n", type_page);
+			return 0;
 		}
 	//} else {
 		//printk(KERN_WARNING "Penguin: Incomplete mount information\n");
