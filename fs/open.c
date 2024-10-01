@@ -982,7 +982,7 @@ char *resolve_dfd_to_path(int dfd, char *buf, int buflen) {
 	char *path = ERR_PTR(-EBADF);
 
 	if (!f) {
-		printk(KERN_ERR "VFS: resolve_dfd_to_path: file is NULL\n");
+	//	printk(KERN_ERR "VFS: resolve_dfd_to_path: file is NULL\n");
 		return path;
 	}
 
