@@ -1392,7 +1392,6 @@ char *resolve_dfd_to_path(int dfd, char *buf, int buflen) {
 
 	file = fget(dfd);
 	if (!file) {
-		printk(KERN_ERR "VFS: resolve_dfd_to_path: file is NULL\n");
 		return path;
 	}
 
