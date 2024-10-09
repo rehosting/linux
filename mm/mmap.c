@@ -316,7 +316,6 @@ static long vma_compute_subtree_gap(struct vm_area_struct *vma)
 
 void log_mm(struct mm_struct *mm);
 void log_mm(struct mm_struct *mm) {
-  // INTROSPECTION VERSION
 	struct vm_area_struct *vma;
 
 	if (!igloo_do_hc || !igloo_log_cov) {
@@ -325,25 +324,43 @@ void log_mm(struct mm_struct *mm) {
 
 	igloo_hypercall(5910, 1); // Starting VMA report
 	
-	down_read(&mm->mmap_sem);
-	for (vma = mm->mmap; vma; vma = vma->vm_next){
+	rcu_read_lock();
+	vma = rcu_dereference(mm->mmap);
+	for (; vma; vma = vma->vm_next) {
 		igloo_hypercall(5911, vma->vm_start);
 		igloo_hypercall(5912, vma->vm_end);
 
 		if (vma->vm_file != NULL) {
-		igloo_hypercall(5913, (unsigned long)vma->vm_file->f_path.dentry->d_name.name); // name as pointer
+			struct dentry *dentry = vma->vm_file->f_path.dentry;
+			if (IS_ERR_OR_NULL(dentry)) {
+				printk(KERN_WARNING "log_mm: dentry is NULL or an error pointer\n");
+				igloo_hypercall(5914, 3); // name is error
+			} else {
+				const char *filename = dentry->d_name.name;
+				if (IS_ERR_OR_NULL(filename)) {
+					printk(KERN_WARNING "log_mm: filename is NULL or an error pointer\n");
+					igloo_hypercall(5914, 3); // name is error
+				} else {
+					// Ensure the filename pointer is aligned before passing it to the hypercall
+					if (((unsigned long)filename & (sizeof(unsigned long) - 1)) == 0) {
+						igloo_hypercall(5913, (unsigned long)filename); // Safe to pass
+					} else {
+						igloo_hypercall(5914, 3); // Handle unaligned case (e.g., report error)
+					}
+				}
+			}
 		} else if (vma->vm_start < mm->start_brk && vma->vm_end >= mm->brk) {
-		igloo_hypercall(5914, 1); // name is heap
+			igloo_hypercall(5914, 1); // name is heap
 		} else if (vma->vm_start <= mm->start_stack && vma->vm_end >= mm->start_stack) {
-		igloo_hypercall(5914, 2); // name is stack
+			igloo_hypercall(5914, 2); // name is stack
 		} else {
-		igloo_hypercall(5914, 3); // name is error
+			igloo_hypercall(5914, 3); // name is error or unaligned
 		}
 		igloo_hypercall(5910, 2); // Ending this VMA
 	}
-	up_read(&mm->mmap_sem);
+	rcu_read_unlock();
 
-  igloo_hypercall(5910, 3); // Ending VMA report
+	igloo_hypercall(5910, 3); // Ending VMA report
 }
 
 
