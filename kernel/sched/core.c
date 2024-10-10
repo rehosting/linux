@@ -2904,17 +2904,30 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	barrier();
 
 	if (igloo_do_hc && igloo_log_cov) {
+		struct task_struct *real_parent;
 		igloo_hypercall(590, (unsigned long)next->comm);
 		igloo_hypercall(591, next->tgid);
-		igloo_hypercall(592, next->real_parent ?  next->real_parent->tgid : 0);
-		igloo_hypercall(593, next->start_time);
-		igloo_hypercall(594, (next->flags & PF_KTHREAD) != 0); // Is it a kernel thread?
-		igloo_hypercall(1595, next->real_parent ? next->real_parent->start_time : 0); // Parent create. XXX shifted 1k
+
+		// Use RCU to safely access real_parent
+		rcu_read_lock();
+		real_parent = rcu_dereference(next->real_parent);
+
+		if (!IS_ERR_OR_NULL(real_parent)) {
+			igloo_hypercall(592, real_parent->tgid);
+			igloo_hypercall(593, next->start_time);
+			igloo_hypercall(594, (next->flags & PF_KTHREAD) != 0); // Is it a kernel thread?
+			igloo_hypercall(1595, real_parent->start_time);
+		} else {
+			igloo_hypercall(592, 0);
+			igloo_hypercall(593, next->start_time);
+			igloo_hypercall(594, (next->flags & PF_KTHREAD) != 0); // Is it a kernel thread?
+			igloo_hypercall(1595, 0); // Parent creation time not available
+		}
+		rcu_read_unlock();
 
 		// Tell us about the current VMAs
 		if (!IS_ERR_OR_NULL(next->mm)) log_mm(next->mm);
 	}
-
 	return finish_task_switch(prev);
 }
 
