@@ -314,39 +314,6 @@ static long vma_compute_subtree_gap(struct vm_area_struct *vma)
 	return max;
 }
 
-void log_mm(struct mm_struct *mm);
-void log_mm(struct mm_struct *mm) {
-  // INTROSPECTION VERSION
-	struct vm_area_struct *vma;
-
-	if (!igloo_do_hc || !igloo_log_cov) {
-		return;
-	}
-
-	igloo_hypercall(5910, 1); // Starting VMA report
-	
-	down_read(&mm->mmap_sem);
-	for (vma = mm->mmap; vma; vma = vma->vm_next){
-		igloo_hypercall(5911, vma->vm_start);
-		igloo_hypercall(5912, vma->vm_end);
-
-		if (vma->vm_file != NULL) {
-		igloo_hypercall(5913, (unsigned long)vma->vm_file->f_path.dentry->d_name.name); // name as pointer
-		} else if (vma->vm_start < mm->start_brk && vma->vm_end >= mm->brk) {
-		igloo_hypercall(5914, 1); // name is heap
-		} else if (vma->vm_start <= mm->start_stack && vma->vm_end >= mm->start_stack) {
-		igloo_hypercall(5914, 2); // name is stack
-		} else {
-		igloo_hypercall(5914, 3); // name is error
-		}
-		igloo_hypercall(5910, 2); // Ending this VMA
-	}
-	up_read(&mm->mmap_sem);
-
-  igloo_hypercall(5910, 3); // Ending VMA report
-}
-
-
 #ifdef CONFIG_DEBUG_VM_RB
 static int browse_rb(struct mm_struct *mm)
 {
@@ -450,10 +417,7 @@ static void validate_mm(struct mm_struct *mm)
 }
 #else
 #define validate_mm_rb(root, ignore) do { } while (0)
-//#define validate_mm(mm) do { } while (0)
-static void validate_mm(struct mm_struct *mm) {
-  log_mm(mm);
-}
+#define validate_mm(mm) do { } while (0)
 #endif
 
 RB_DECLARE_CALLBACKS(static, vma_gap_callbacks, struct vm_area_struct, vm_rb,
