@@ -91,44 +91,6 @@ static int __init early_igloo_do_hc(char *p)
     return 0;
 }
 early_param("igloo_do_hc", early_igloo_do_hc);
-#include <linux/igloo.h>
-#include <linux/hypercall.h>
-
-void log_mm(struct mm_struct *mm);
-void log_mm(struct mm_struct *mm){
-	// INTROSPECTION VERSION
-	if (!igloo_do_hc || !igloo_log_cov) {
-		return;
-	}
-	struct vm_area_struct *vma;
-	VMA_ITERATOR(vmi, mm, 0);
- 
-	mmap_read_lock(mm);
- 
-	igloo_hypercall(IGLOO_HYP_VMA_REPORT_UPDATE, 1); // Starting VMA report
-
-	for_each_vma(vmi, vma) {
-	  igloo_hypercall(IGLOO_HYP_VMA_VM_START, vma->vm_start);
-	  igloo_hypercall(IGLOO_HYP_VMA_VM_END, vma->vm_end);
-  
-	  if (vma->vm_file != NULL) {
-		  igloo_hypercall(IGLOO_HYP_VMA_NAME, (unsigned long)vma->vm_file->f_path.dentry->d_name.name); // name as pointer
-	  } else if (vma->vm_start < mm->start_brk && vma->vm_end >= mm->brk) {
-		  igloo_hypercall(IGLOO_HYP_VMA_SPECIAL, 1); // name is heap
-	  } else if (vma->vm_start <= mm->start_stack && vma->vm_end >= mm->start_stack) {
-		  igloo_hypercall(IGLOO_HYP_VMA_SPECIAL, 2); // name is stack
-	  } else {
-		  igloo_hypercall(IGLOO_HYP_VMA_SPECIAL, 3); // name is error
-	  }
-
-	  igloo_hypercall(IGLOO_HYP_VMA_REPORT_UPDATE, 2); // Ending this VMA
-
-  }
-
-  igloo_hypercall(IGLOO_HYP_VMA_REPORT_UPDATE, 3); // Ending VMA report
-  mmap_read_unlock(mm);
-}
-
 
 bool igloo_log_cov = false;
 static int __init early_igloo_log_cov(char *p)
