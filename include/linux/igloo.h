@@ -17,6 +17,8 @@ extern bool igloo_block_halt; // reboot.c
 #define IGLOO_IPV4_RELEASE 204
 #define IGLOO_IPV6_RELEASE 205
 
+#define IGLOO_HYP_UNAME 300
+
 #define IGLOO_HYP_TASK_COMM 590
 #define IGLOO_HYP_TASK_TGID 591
 #define IGLOO_HYP_TASK_PTGID 592
@@ -30,6 +32,8 @@ extern bool igloo_block_halt; // reboot.c
 #define IGLOO_HYP_TASK_ENVC 600
 #define IGLOO_HYP_TASK_EUID 601
 #define IGLOO_HYP_TASK_EGID 602
+#define HC_TASK_CHANGE 590
+#define HC_VMA_UPDATE 591
 
 #define IGLOO_HYP_TASK_PSTIME 1595
 
@@ -39,9 +43,15 @@ extern bool igloo_block_halt; // reboot.c
 #define IGLOO_HYP_VMA_NAME 5913
 #define IGLOO_HYP_VMA_SPECIAL 5914
 
+#define IGLOO_HYP_SETUP_SYSCALL 0x1337
+#define IGLOO_HYP_SYSCALL_ENTER 0x1338
+#define IGLOO_HYP_SYSCALL_RETURN 0x1339
+
 #define IGLOO_SIGSTOP_KTHREAD 0x0c6ea29a
 #define IGLOO_SIGSTOP_ARGV 0xbae7babc
 #define IGLOO_SIGSTOP_QUERY 0x7b7287d5
+
+#define IGLOO_SYSCALL 0x6408400B
 
 #endif /* _LINUX_IGLOO_H */
 
