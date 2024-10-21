@@ -6,6 +6,7 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/hypercall.h>
+#include <linux/igloo.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Andrew");
@@ -367,6 +368,11 @@ static int finish_task_switch_hook(struct kprobe *kp, struct pt_regs *regs) {
 /* Register probes for mmap and munmap */
 int __init gva_hc_init(void) {
     int ret = 0;
+    if (!igloo_log_cov) {
+        return 0;
+    }
+
+
     mmap_retprobe.handler = mmap_ret_handler;
     mmap_retprobe.maxactive = MAX_PROBES;
     mmap_retprobe.kp.symbol_name = "do_mmap";
