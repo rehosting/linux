@@ -12,6 +12,8 @@ extern bool igloo_block_halt; // reboot.c
 #define IGLOO_IPV4_BIND    201
 #define IGLOO_IPV6_SETUP   202
 #define IGLOO_IPV6_BIND    203
+#define IGLOO_IPV4_RELEASE 204
+#define IGLOO_IPV6_RELEASE 205
 
 #define IGLOO_HYP_UNAME 300
 

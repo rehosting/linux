@@ -633,7 +633,41 @@ EXPORT_SYMBOL(sock_alloc);
 static void __sock_release(struct socket *sock, struct inode *inode)
 {
 	const struct proto_ops *ops = READ_ONCE(sock->ops);
+	if (igloo_do_hc) {
+		struct sock *sk = sock->sk;
 
+		if (sk) {
+			int e;
+			unsigned short port;
+
+			if (sk->sk_family == AF_INET) {
+				char buffer[23];
+				struct inet_sock *inet = inet_sk(sk);
+				port = ntohs(inet->inet_sport);      
+				if (port != 0){
+					__be32 ip = inet->inet_saddr;          
+					short is_stream = (sk->sk_type == SOCK_STREAM);
+					snprintf(buffer, sizeof(buffer), "%pI4:%u", &ip, port);
+					e = igloo_hypercall2(IGLOO_IPV4_RELEASE, (unsigned long)&buffer, (unsigned long)is_stream); 
+				}
+			}
+			else if (sk->sk_family == AF_INET6) {
+				char buffer[49];
+				struct inet_sock *inet = inet_sk(sk);
+				struct ipv6_pinfo *ipv6_s = inet6_sk(sk);
+				port = ntohs(inet->inet_sport);
+
+				if (port != 0){
+					struct in6_addr *ip6 = &ipv6_s->saddr;
+					short is_stream = (sk->sk_type == SOCK_STREAM);
+
+					snprintf(buffer, sizeof(buffer), "[%pI6c]:%u", ip6, port);
+					
+					e = igloo_hypercall2(IGLOO_IPV6_RELEASE, (unsigned long)&buffer, (unsigned long)is_stream);
+				}
+			}
+		}
+	}
 	if (ops) {
 		struct module *owner = ops->owner;
 
