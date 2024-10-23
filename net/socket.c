@@ -614,7 +614,7 @@ void sock_release(struct socket *sock)
 				}
 			}
 			else if (sk->sk_family == AF_INET6) {
-				char buffer[47];
+				char buffer[49];
 				struct inet_sock *inet = inet_sk(sk);
 				struct ipv6_pinfo *ipv6_s = inet6_sk(sk);
 				port = ntohs(inet->inet_sport);
