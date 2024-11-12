@@ -36,6 +36,8 @@
 
 #include "internal.h"
 
+#include <linux/path.h>
+
 int do_truncate(struct dentry *dentry, loff_t length, unsigned int time_attrs,
 	struct file *filp)
 {
@@ -976,17 +978,21 @@ EXPORT_SYMBOL(file_open_root);
 
 char *resolve_dfd_to_path(int dfd, char *buf, int buflen);
 char *resolve_dfd_to_path(int dfd, char *buf, int buflen) {
-	struct fd f = fdget(dfd);
+	struct file *f = fget(dfd);
 	char *path = ERR_PTR(-EBADF);
 
-	if (!f.file) {
+	if (!f) {
 		printk(KERN_ERR "VFS: resolve_dfd_to_path: file is NULL\n");
-		fdput(f);
 		return path;
 	}
 
-	path = file_path(f.file, buf, buflen);
-	fdput(f);
+	path = d_path(&f->f_path, buf, buflen);
+	if (IS_ERR(path)) {
+		fput(f);
+		return path;
+	}
+	
+	fput(f);
 	return path;
 }
 
