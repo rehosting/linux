@@ -5,6 +5,7 @@
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/version.h>
 #include <linux/hypercall.h>
 #include <linux/igloo.h>
 
@@ -17,6 +18,10 @@ MODULE_VERSION("0.1");
 #define HC_TASK_CHANGE 590
 #define HC_VMA_UPDATE 591
 // #define DEBUG_PRINT
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 15, 0)
+#define READ_ONCE(x) (*(volatile typeof(x) *)&(x))
+#endif
 
 // Enum for types of VMA updates - insert, remove, update
 typedef enum {
@@ -337,13 +342,13 @@ static int finish_task_switch_hook(struct kprobe *kp, struct pt_regs *regs) {
         if (!IS_ERR_OR_NULL(parent) && parent != next && !(READ_ONCE(parent->flags) & PF_KTHREAD)) {
             // Only dereference parent fields if parent is not a kernel thread and not self-referencing
             task_info.parent_tgid = cpu_to_le32(READ_ONCE(parent->tgid));
-            task_info.start_time = cpu_to_le32(READ_ONCE(parent->start_time));
+            task_info.start_time = cpu_to_le32(READ_ONCE(parent->start_time.tv_sec));
         }
         rcu_read_unlock();
 
         // For user-space tasks, set tgid and start_time
         task_info.tgid = cpu_to_le32(READ_ONCE(next->tgid));
-        task_info.start_time = cpu_to_le32(READ_ONCE(next->start_time));
+        task_info.start_time = cpu_to_le32(READ_ONCE(next->start_time.tv_sec));
     } else {
         // Otherwise set the kernel thread (we'll ignore these in our coverage analysis)
         // Might actually be exiting, not just kernel. Oh well
