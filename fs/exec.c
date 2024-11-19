@@ -1980,12 +1980,15 @@ static int do_execveat_common(int fd, struct filename *filename,
 		argv_ptr = (char __user **)argv.ptr.native;
   
 	  for (i = 0; i < bprm->argc; ++i) {
-		  if (get_user(arg, &argv_ptr[i]) == 0) {
-			  if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
-				  //printk(KERN_CRIT "Arg %d: %s\n", i, arg_buf);
-				  igloo_hypercall2(IGLOO_HYP_TASK_ARGV, (unsigned long) arg_buf, i);	//do a hypercall with each argv buffer and associated index
-			  }
+		  const char __user *arg = get_user_arg_ptr(argv, i);
+		  if (!arg){
+			  break;
 		  }
+		  if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) < 0){
+			  break;
+		  }
+		  //printk(KERN_CRIT "Arg %d: %s\n", i, arg_buf);
+		  igloo_hypercall2(IGLOO_HYP_TASK_ARGV, (unsigned long) arg_buf, i);	//do a hypercall with each argv buffer and associated index
 	  }
 	  igloo_hypercall(IGLOO_HYP_TASK_ARGC, bprm->argc);
 	#ifdef CONFIG_COMPAT
@@ -1996,12 +1999,15 @@ static int do_execveat_common(int fd, struct filename *filename,
 		  envp_ptr = (char __user **)envp.ptr.native;
 	
 		for (i = 0; i < bprm->envc; ++i) {
-			if (get_user(arg, &envp_ptr[i]) == 0) {
-				if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
-					//printk(KERN_CRIT "Env %d: %s\n", i, arg_buf);
-					igloo_hypercall2(IGLOO_HYP_TASK_ENVV, (unsigned long) arg_buf, i);	//do a hypercall with each envp buffer and associated index
-				}
+			const char __user *arg = get_user_arg_ptr(envp, i);
+			if (!arg){
+				break;
 			}
+
+			if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) < 0){
+				break;
+			}	
+			igloo_hypercall2(IGLOO_HYP_TASK_ENVV, (unsigned long) arg_buf, i);	//do a hypercall with each envp buffer and associated index
 		}
 		igloo_hypercall(IGLOO_HYP_TASK_ENVV, bprm->envc);
 		//the creds are set in the call to prepare_binprm above
