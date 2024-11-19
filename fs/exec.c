@@ -1764,25 +1764,20 @@ static int do_execveat_common(int fd, struct filename *filename,
 		mutex_lock(&execve_mutex);		//prevents other kernel threads from issuing interleaved sequences of hypercalls
 
 	if (igloo_do_hc) {
-		char __user **argv_ptr;
-		char *arg;
 		char arg_buf[256];
 		int i;
-#ifdef CONFIG_COMPAT
-		if (argv.is_compat)
-		argv_ptr = (char __user **)argv.ptr.compat;
-		else
-#endif
-		argv_ptr = (char __user **)argv.ptr.native;
 
 		for (i = 0; i < bprm->argc; ++i) {
-			if (get_user(arg, &argv_ptr[i]) == 0) {
-				if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
-					//printk(KERN_CRIT "Arg %d: %s\n", i, arg_buf);
-					//do a hypercall with each argv buffer and associated index
-					igloo_hypercall2(597, (unsigned long) arg_buf, i);
-				}
+			const char __user *arg = get_user_arg_ptr(argv, i);
+			if (!arg) {
+				break;
 			}
+			if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) < 0) {
+				break;
+			}
+			//printk(KERN_CRIT "Arg %d: %s\n", i, arg_buf);
+			//do a hypercall with each argv buffer and associated index
+			igloo_hypercall2(597, (unsigned long) arg_buf, i);
 		}
 		igloo_hypercall(598, bprm->argc);
 	}
@@ -1800,26 +1795,19 @@ static int do_execveat_common(int fd, struct filename *filename,
 
 
 	if (igloo_do_hc) {
-		char __user **envp_ptr;
-		char *arg;
 		char arg_buf[256];
 		int i;
 
-#ifdef CONFIG_COMPAT
-		if (envp.is_compat)
-			envp_ptr = (char __user **)envp.ptr.compat;
-		else
-#endif
-			envp_ptr = (char __user **)envp.ptr.native;
-
 		for (i = 0; i < bprm->envc; ++i) {
-			//do a hypercall with each envp buffer and associated index
-			if (get_user(arg, &envp_ptr[i]) == 0) {
-				if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) == 0) {
-					//printk(KERN_CRIT "Env %d: %s\n", i, arg_buf);
-					igloo_hypercall2(599, (unsigned long) arg_buf, i);
-				}
+			const char __user *arg = get_user_arg_ptr(envp, i);
+			if (!arg) {
+				break;
 			}
+			if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) < 0) {
+				break;
+			}
+			//printk(KERN_CRIT "Env %d: %s\n", i, arg_buf);
+			igloo_hypercall2(599, (unsigned long) arg_buf, i);
 		}
 		igloo_hypercall(600, bprm->envc);
 	}
