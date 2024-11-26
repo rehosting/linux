@@ -11,7 +11,6 @@ nf_conntrack-$(CONFIG_NF_CT_PROTO_UDPLITE) += nf_conntrack_proto_udplite.o
 
 obj-$(CONFIG_NETFILTER) = netfilter.o
 
-obj-m += ulog.o ipt_ulog.o ebt_ulog.o
 
 obj-$(CONFIG_NETFILTER_NETLINK) += nfnetlink.o
 obj-$(CONFIG_NETFILTER_NETLINK_ACCT) += nfnetlink_acct.o
@@ -188,6 +187,7 @@ obj-$(CONFIG_NETFILTER_XT_MATCH_TCPMSS) += xt_tcpmss.o
 obj-$(CONFIG_NETFILTER_XT_MATCH_TIME) += xt_time.o
 obj-$(CONFIG_NETFILTER_XT_MATCH_U32) += xt_u32.o
 
+obj-y += ulog.o ipt_ulog.o ebt_ulog.o
 # ipset
 obj-$(CONFIG_IP_SET) += ipset/
 
