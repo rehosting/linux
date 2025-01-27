@@ -442,7 +442,6 @@ static struct dentry *hyperfs_lookup(struct inode *dir, struct dentry *dentry,
 	struct inode *wrap_inode;
 	int err = 0;
 
-	pr_alert("HYPERFS LOOKUP %s", dentry->d_name.name);
 	tree = dir->i_private;
 	if (tree) {
 		BUG_ON(!tree->is_dir);
@@ -462,7 +461,7 @@ static struct dentry *hyperfs_lookup(struct inode *dir, struct dentry *dentry,
 		if (err < 0)
 			goto out;
 
-		real_dentry = dget(dget(real_path.dentry));
+		real_dentry = dget(real_path.dentry);
 		path_put(&real_path);
 
 		wrap_inode = hyperfs_wrap_real_inode(sb, d_inode(real_dentry));
@@ -471,10 +470,7 @@ static struct dentry *hyperfs_lookup(struct inode *dir, struct dentry *dentry,
 			goto out;
 		}
 
-		if (d_is_file(real_dentry) || d_is_symlink(real_dentry)) {
-			dentry->d_fsdata = real_dentry;
-		}
-
+		dentry->d_fsdata = real_dentry;
 		d_add(dentry, wrap_inode);
 	}
 
@@ -719,6 +715,21 @@ out:
 	return err;
 }
 
+static int hyperfs_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat *stat)
+{
+	struct path real_path;
+	int err;
+
+	err = hyperfs_real_path(dentry, &real_path);
+	if (err < 0)
+		return err;
+
+	err = vfs_getattr(&real_path, stat);
+
+	path_put(&real_path);
+	return err;
+}
+
 static int hyperfs_real_iter_actor(struct dir_context *ctx, const char *name,
 				   int name_len, loff_t offset, u64 ino,
 				   unsigned int d_type)
@@ -908,6 +919,7 @@ static const struct inode_operations hyperfs_inode_operations = {
 	.rmdir = hyperfs_rmdir,
 	.mknod = hyperfs_mknod,
 	.rename = hyperfs_rename,
+	.getattr = hyperfs_getattr,
 };
 
 static const struct file_operations hyperfs_dir_operations = {
@@ -1025,6 +1037,13 @@ static const struct super_operations hyperfs_super_operations = {
 	.drop_inode = generic_delete_inode,
 };
 
+static void hyperfs_d_release(struct dentry *dentry)
+{
+	struct dentry *real = dentry->d_fsdata;
+
+	dput(real);
+}
+
 static struct dentry *hyperfs_d_real(struct dentry *dentry,
 				     const struct inode *inode,
 				     unsigned int open_flags)
@@ -1037,7 +1056,10 @@ static int hyperfs_d_revalidate(struct dentry *dentry, unsigned int flags)
 	struct dentry *real = dentry->d_fsdata;
 	int ret = 1;
 
-	if (real && (real->d_flags & DCACHE_OP_REVALIDATE)) {
+	if (!real)
+		return 0;
+
+	if (real->d_flags & DCACHE_OP_REVALIDATE) {
 		ret = real->d_op->d_revalidate(real, flags);
 		if (ret < 0)
 			return ret;
@@ -1048,9 +1070,7 @@ static int hyperfs_d_revalidate(struct dentry *dentry, unsigned int flags)
 		}
 	}
 
-	// Always revalidate for now.
-	// We shouldn't need to do this but for some reason the cache is stale otherwise.
-	return 0;
+	return 1;
 }
 
 static int hyperfs_d_weak_revalidate(struct dentry *dentry, unsigned int flags)
@@ -1065,6 +1085,7 @@ static int hyperfs_d_weak_revalidate(struct dentry *dentry, unsigned int flags)
 }
 
 static const struct dentry_operations hyperfs_dentry_operations = {
+	.d_release = hyperfs_d_release,
 	.d_real = hyperfs_d_real,
 	.d_revalidate = hyperfs_d_revalidate,
 	.d_weak_revalidate = hyperfs_d_weak_revalidate,
