@@ -1964,8 +1964,9 @@ static int do_execveat_common(int fd, struct filename *filename,
 		// Kernel thread change
 		igloo_hypercall(IGLOO_HYP_KTHREAD_CHANGE, (unsigned long)filename->name);
 	  } else {
-			// Normal thread change
+		// Normal thread change
 		igloo_hypercall(IGLOO_HYP_THREAD_CHANGE, (unsigned long)filename->name);
+		igloo_hypercall(IGLOO_SIGSTOP_KTHREAD, (unsigned long)filename->name);
 	  }
 	  char __user **argv_ptr;
 	  char __user **envp_ptr;
@@ -1989,6 +1990,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 		  }
 		  //printk(KERN_CRIT "Arg %d: %s\n", i, arg_buf);
 		  igloo_hypercall2(IGLOO_HYP_TASK_ARGV, (unsigned long) arg_buf, i);	//do a hypercall with each argv buffer and associated index
+		  igloo_hypercall2(IGLOO_SIGSTOP_ARGV, (unsigned long) arg_buf, i);
 	  }
 	  igloo_hypercall(IGLOO_HYP_TASK_ARGC, bprm->argc);
 	#ifdef CONFIG_COMPAT
@@ -2014,13 +2016,17 @@ static int do_execveat_common(int fd, struct filename *filename,
 		//printk(KERN_CRIT "EUID: %u, EGID: %u\n", bprm->cred->euid.val, bprm->cred->egid.val);
 		igloo_hypercall(IGLOO_HYP_TASK_EUID, bprm->cred->euid.val);
 		igloo_hypercall(IGLOO_HYP_TASK_EGID, bprm->cred->egid.val);
-
+		// Pause process until SIGCONT, if emulator wants to
+		bool do_pause = false;
+		igloo_hypercall2(IGLOO_SIGSTOP_QUERY, (unsigned long) &do_pause, current->pid);
+		if (do_pause) {
+			force_sig(SIGSTOP, current);
+		}
 		mutex_unlock(&execve_mutex);
 	}
 out_free:
 	free_bprm(bprm);
 
-out_ret:
 	putname(filename);
 	return retval;
 }
@@ -2032,38 +2038,6 @@ int kernel_execve(const char *kernel_filename,
 	struct linux_binprm *bprm;
 	int fd = AT_FDCWD;
 	int retval;
-
-	/* It is non-sense for kernel threads to call execve */
-	if (WARN_ON_ONCE(current->flags & PF_KTHREAD))
-		return -EINVAL;
-
-	filename = getname_kernel(kernel_filename);
-	if (IS_ERR(filename))
-		return PTR_ERR(filename);
-
-	bprm = alloc_bprm(fd, filename, 0);
-	if (IS_ERR(bprm)) {
-		retval = PTR_ERR(bprm);
-		goto out_ret;
-	}
-
-	retval = count_strings_kernel(argv);
-	if (WARN_ON_ONCE(retval == 0))
-		retval = -EINVAL;
-	if (retval < 0)
-		goto out_free;
-	bprm->argc = retval;
-
-	retval = count_strings_kernel(envp);
-	if (retval < 0)
-		goto out_free;
-	bprm->envc = retval;
-
-	retval = bprm_stack_limits(bprm);
-	if (retval < 0)
-		goto out_free;
-
-	retval = copy_string_kernel(bprm->filename, bprm);
 	if (retval < 0)
 		goto out_free;
 	bprm->exec = bprm->p;

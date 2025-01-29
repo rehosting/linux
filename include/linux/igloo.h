@@ -39,6 +39,10 @@ extern bool igloo_block_halt; // reboot.c
 #define IGLOO_HYP_VMA_NAME 5913
 #define IGLOO_HYP_VMA_SPECIAL 5914
 
+#define IGLOO_SIGSTOP_KTHREAD 0x0c6ea29a
+#define IGLOO_SIGSTOP_ARGV 0xbae7babc
+#define IGLOO_SIGSTOP_QUERY 0x7b7287d5
+
 #endif /* _LINUX_IGLOO_H */
 
 
