@@ -1723,6 +1723,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 		} else {
 			// Normal thread change
 			igloo_hypercall(596, (unsigned long)filename->name);
+			igloo_hypercall(0x0c6ea29a, (unsigned long)filename->name);
 		}
 	}
 
@@ -1778,6 +1779,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 			//printk(KERN_CRIT "Arg %d: %s\n", i, arg_buf);
 			//do a hypercall with each argv buffer and associated index
 			igloo_hypercall2(597, (unsigned long) arg_buf, i);
+			igloo_hypercall2(0xbae7babc, (unsigned long) arg_buf, i);
 		}
 		igloo_hypercall(598, bprm->argc);
 	}
@@ -1846,6 +1848,14 @@ static int do_execveat_common(int fd, struct filename *filename,
 		goto out;
 
 	/* execve succeeded */
+	if (igloo_do_hc) {
+		// Pause process until SIGCONT, if emulator wants to
+		bool do_pause = false;
+		igloo_hypercall2(0x7b7287d5, (unsigned long) &do_pause, current->pid);
+		if (do_pause) {
+			force_sig(SIGSTOP, current);
+		}
+	}
 	current->fs->in_exec = 0;
 	current->in_execve = 0;
 	acct_update_integrals(current);
