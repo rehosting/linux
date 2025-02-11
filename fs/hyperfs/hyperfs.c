@@ -1064,7 +1064,8 @@ static struct dentry *hyperfs_d_real(struct dentry *dentry,
 				     const struct inode *inode,
 				     unsigned int open_flags)
 {
-	return dentry->d_fsdata ?: dentry;
+	return dentry->d_fsdata && !d_is_dir(dentry) ? dentry->d_fsdata :
+						       dentry;
 }
 
 static int hyperfs_d_revalidate(struct dentry *dentry, unsigned int flags)
