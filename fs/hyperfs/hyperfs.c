@@ -564,6 +564,20 @@ out:
 	return ret;
 }
 
+static int hyperfs_instantiate_common(struct inode *dir, struct dentry *dentry,
+				      struct dentry *real_dentry)
+{
+	struct super_block *sb = dir->i_sb;
+	struct inode *inode;
+
+	inode = hyperfs_wrap_real_inode(sb, real_dentry->d_inode);
+	if (!inode)
+		return -ENOMEM;
+
+	d_instantiate(dentry, inode);
+	return 0;
+}
+
 static int hyperfs_create(struct inode *dir, struct dentry *dentry,
 			  umode_t mode, bool excl)
 {
@@ -576,6 +590,8 @@ static int hyperfs_create(struct inode *dir, struct dentry *dentry,
 
 	err = vfs_create(real_dentry->d_parent->d_inode, real_dentry, mode,
 			 excl);
+	if (!err)
+		err = hyperfs_instantiate_common(dir, dentry, real_dentry);
 
 	dput(real_dentry);
 	return err;
