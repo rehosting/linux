@@ -553,8 +553,10 @@ static struct dentry *hyperfs_get_real_dentry(struct dentry *dentry)
 		goto out;
 	}
 
+	inode_lock(real_parent_path.dentry->d_inode);
 	ret = lookup_one_len(dentry->d_name.name, real_parent_path.dentry,
 			     dentry->d_name.len);
+	inode_unlock(real_parent_path.dentry->d_inode);
 	if (IS_ERR(ret))
 		goto out_path;
 
