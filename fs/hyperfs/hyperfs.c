@@ -6,6 +6,7 @@
 #include <linux/parser.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include "../internal.h"
 
 #define MAGIC_VALUE 0x51ec3692 // crc32("hyperfs")
 #define HYPERFS_DEBUG 0
@@ -391,7 +392,7 @@ static int hyp_file_op(struct hyperfs_data data)
 	return err;
 }
 
-static int hyperfs_real_path(struct dentry *dentry, struct path *real_path)
+static const char *hyperfs_real_path_name(struct dentry *dentry)
 {
 	struct hyperfs *fs = dentry->d_sb->s_fs_info;
 	char *real_name = NULL, *dentry_path_buf = NULL, *dentry_path;
@@ -417,18 +418,28 @@ static int hyperfs_real_path(struct dentry *dentry, struct path *real_path)
 
 	err = snprintf(real_name, PATH_MAX, "%s/%s", fs->passthrough_path,
 		       dentry_path);
-	if (err >= PATH_MAX) {
-		err = -ENAMETOOLONG;
-		goto out;
-	}
-
-	err = kern_path(real_name, 0, real_path);
-	if (err < 0)
-		goto out;
+	err = err >= PATH_MAX ? -ENAMETOOLONG : 0;
 
 out:
-	kfree(real_name);
 	kfree(dentry_path_buf);
+	if (err) {
+		kfree(real_name);
+		return ERR_PTR(err);
+	} else
+		return real_name;
+}
+
+static int hyperfs_real_path(struct dentry *dentry, struct path *real_path)
+{
+	int err = 0;
+	const char *real_name = hyperfs_real_path_name(dentry);
+
+	if (IS_ERR(real_name))
+		return PTR_ERR(real_name);
+
+	err = kern_path(real_name, 0, real_path);
+
+	kfree(real_name);
 	return err;
 }
 
@@ -478,27 +489,67 @@ out:
 	return err < 0 ? ERR_PTR(err) : NULL;
 }
 
+static int hyperfs_open(struct inode *inode, struct file *file)
+{
+	const char *real_name;
+	struct file *real_file;
+	int err = 0;
+
+	real_name = hyperfs_real_path_name(file->f_path.dentry);
+	if (IS_ERR(real_name))
+		return PTR_ERR(real_name);
+
+	real_file = filp_open(real_name, file->f_flags, inode->i_mode);
+	if (IS_ERR(real_file))
+		err = PTR_ERR(real_file);
+
+	if (err == -ENOENT)
+		err = 0;
+	else if (!err)
+		file->private_data = real_file;
+
+	kfree(real_name);
+	return err;
+}
+
+static int hyperfs_release(struct inode *inode, struct file *file)
+{
+	struct file *real_file = file->private_data;
+
+	if (real_file)
+		fput(real_file);
+
+	return 0;
+}
+
 static ssize_t hyperfs_read(struct file *file, char __user *buf, size_t size,
 			    loff_t *offset)
 {
 	struct hyperfs_tree *tree = file->f_inode->i_private;
+	struct file *real_file = file->private_data;
 	ssize_t ret;
 	char kbuf[128];
 
-	BUG_ON(tree->is_dir);
+	if (tree) {
+		BUG_ON(tree->is_dir);
 
-	ret = hyp_file_op((struct hyperfs_data){
-		.type = HYP_READ,
-		.path = tree->path,
-		.read.buf = kbuf,
-		.read.size = min(size, sizeof(kbuf)),
-		.read.offset = *offset,
-	});
-	if (ret >= 0) {
-		*offset += ret;
-		if (copy_to_user(buf, kbuf, ret))
-			ret = -EFAULT;
+		ret = hyp_file_op((struct hyperfs_data){
+			.type = HYP_READ,
+			.path = tree->path,
+			.read.buf = kbuf,
+			.read.size = min(size, sizeof(kbuf)),
+			.read.offset = *offset,
+		});
+		if (ret >= 0) {
+			*offset += ret;
+			if (copy_to_user(buf, kbuf, ret))
+				ret = -EFAULT;
+		}
+	} else {
+		BUG_ON(!real_file);
+		ret = vfs_read(real_file, buf, size, offset);
 	}
+
 	return ret;
 }
 
@@ -506,22 +557,29 @@ static ssize_t hyperfs_write(struct file *file, const char __user *buf,
 			     size_t size, loff_t *offset)
 {
 	struct hyperfs_tree *tree = file->f_inode->i_private;
+	struct file *real_file = file->private_data;
 	ssize_t ret;
 	char kbuf[128];
 
-	BUG_ON(tree->is_dir);
+	if (tree) {
+		BUG_ON(tree->is_dir);
 
-	if (copy_from_user(kbuf, buf, sizeof(kbuf)))
-		return -EFAULT;
-	ret = hyp_file_op((struct hyperfs_data){
-		.type = HYP_WRITE,
-		.path = tree->path,
-		.write.buf = kbuf,
-		.write.size = size,
-		.write.offset = *offset,
-	});
-	if (ret >= 0)
-		*offset += ret;
+		if (copy_from_user(kbuf, buf, sizeof(kbuf)))
+			return -EFAULT;
+		ret = hyp_file_op((struct hyperfs_data){
+			.type = HYP_WRITE,
+			.path = tree->path,
+			.write.buf = kbuf,
+			.write.size = size,
+			.write.offset = *offset,
+		});
+		if (ret >= 0)
+			*offset += ret;
+	} else {
+		BUG_ON(!real_file);
+		ret = vfs_write(real_file, buf, size, offset);
+	}
+
 	return ret;
 }
 
@@ -529,15 +587,20 @@ static long hyperfs_ioctl(struct file *file, unsigned int cmd,
 			  unsigned long arg)
 {
 	struct hyperfs_tree *tree = file->f_inode->i_private;
+	struct file *real_file = file->private_data;
 
-	BUG_ON(tree->is_dir);
-
-	return hyp_file_op((struct hyperfs_data){
-		.type = HYP_IOCTL,
-		.path = tree->path,
-		.ioctl.cmd = cmd,
-		.ioctl.data = (void *)arg,
-	});
+	if (tree) {
+		BUG_ON(tree->is_dir);
+		return hyp_file_op((struct hyperfs_data){
+			.type = HYP_IOCTL,
+			.path = tree->path,
+			.ioctl.cmd = cmd,
+			.ioctl.data = (void *)arg,
+		});
+	} else {
+		BUG_ON(!real_file);
+		return vfs_ioctl(real_file, cmd, arg);
+	}
 }
 
 static struct dentry *hyperfs_get_real_dentry(struct dentry *dentry)
@@ -733,7 +796,8 @@ out:
 	return err;
 }
 
-static int hyperfs_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat *stat)
+static int hyperfs_getattr(struct vfsmount *mnt, struct dentry *dentry,
+			   struct kstat *stat)
 {
 	struct path real_path;
 	int err;
@@ -919,6 +983,8 @@ static int hyperfs_readlink(struct dentry *dentry, char __user *buffer,
 }
 
 static const struct file_operations hyperfs_file_operations = {
+	.open = hyperfs_open,
+	.release = hyperfs_release,
 	.read = hyperfs_read,
 	.write = hyperfs_write,
 	.unlocked_ioctl = hyperfs_ioctl,
@@ -1011,7 +1077,7 @@ static struct inode *hyperfs_wrap_real_inode(struct super_block *sb,
 		break;
 	default:
 		inode->i_op = &empty_iops;
-		inode->i_fop = &empty_fops;
+		inode->i_fop = &hyperfs_file_operations;
 	}
 	spin_unlock(&inode->i_lock);
 
@@ -1062,14 +1128,6 @@ static void hyperfs_d_release(struct dentry *dentry)
 	dput(real);
 }
 
-static struct dentry *hyperfs_d_real(struct dentry *dentry,
-				     const struct inode *inode,
-				     unsigned int open_flags)
-{
-	return dentry->d_fsdata && !d_is_dir(dentry) ? dentry->d_fsdata :
-						       dentry;
-}
-
 static int hyperfs_d_revalidate(struct dentry *dentry, unsigned int flags)
 {
 	struct dentry *real = dentry->d_fsdata;
@@ -1105,7 +1163,6 @@ static int hyperfs_d_weak_revalidate(struct dentry *dentry, unsigned int flags)
 
 static const struct dentry_operations hyperfs_dentry_operations = {
 	.d_release = hyperfs_d_release,
-	.d_real = hyperfs_d_real,
 	.d_revalidate = hyperfs_d_revalidate,
 	.d_weak_revalidate = hyperfs_d_weak_revalidate,
 };
