@@ -23,7 +23,7 @@
 #include <linux/fscrypt.h>
 #include <linux/fileattr.h>
 #include <linux/igloo.h>
-#include <linux/hyperfile.h>
+#include <linux/hypercall.h>
 
 #include "internal.h"
 
