@@ -5,6 +5,10 @@ extern unsigned long igloo_task_size; // mmap.c
 extern bool igloo_do_hc; // mmap.c
 
 #define IGLOO_IOCTL_ENOTTY 105
+#define IGLOO_IPV4_SETUP   200
+#define IGLOO_IPV4_BIND    201
+#define IGLOO_IPV6_SETUP   202
+#define IGLOO_IPV6_BIND    203
 
 #define IGLOO_HYP_TASK_ARGV 597
 #define IGLOO_HYP_TASK_ARGC 598
