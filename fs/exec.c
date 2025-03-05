@@ -2020,13 +2020,13 @@ static int do_execveat_common(int fd, struct filename *filename,
 		bool do_pause = false;
 		igloo_hypercall2(IGLOO_SIGSTOP_QUERY, (unsigned long) &do_pause, current->pid);
 		if (do_pause) {
-			force_sig(SIGSTOP, current);
+			force_sig(SIGSTOP);
 		}
 		mutex_unlock(&execve_mutex);
 	}
 out_free:
 	free_bprm(bprm);
-
+out_ret:
 	putname(filename);
 	return retval;
 }
@@ -2053,7 +2053,6 @@ int kernel_execve(const char *kernel_filename,
 	retval = bprm_execve(bprm);
 out_free:
 	free_bprm(bprm);
-out_ret:
 	putname(filename);
 	return retval;
 }
