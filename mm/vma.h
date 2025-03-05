@@ -137,7 +137,7 @@ static inline pgoff_t vma_pgoff_offset(struct vm_area_struct *vma,
 void validate_mm(struct mm_struct *mm);
 #else
 extern void log_mm(struct mm_struct *mm);
-#define validate_mm(mm) do { log_mm(mm); } while (0)
+#define validate_mm(mm) do { } while (0)
 #endif
 
 /* Required for expand_downwards(). */
