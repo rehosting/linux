@@ -737,7 +737,7 @@ SYSCALL_DEFINE2(delete_module, const char __user *, name_user,
 	char buf[MODULE_FLAGS_BUF_SIZE];
 	int ret, forced = 0;
 
-	return ret;
+	return 0;
 
 	if (!capable(CAP_SYS_MODULE) || modules_disabled)
 		return -EPERM;
