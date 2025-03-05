@@ -1387,17 +1387,17 @@ EXPORT_SYMBOL(file_open_root);
 
 char *resolve_dfd_to_path(int dfd, char *buf, int buflen);
 char *resolve_dfd_to_path(int dfd, char *buf, int buflen) {
-	struct fd f = fdget(dfd);
+	struct file *file;
 	char *path = ERR_PTR(-EBADF);
 
-	if (!f.file) {
+	file = fget(dfd);
+	if (!file) {
 		printk(KERN_ERR "VFS: resolve_dfd_to_path: file is NULL\n");
-		fdput(f);
 		return path;
 	}
 
-	path = file_path(f.file, buf, buflen);
-	fdput(f);
+	path = file_path(file, buf, buflen);
+	fput(file);
 	return path;
 }
 
@@ -1427,7 +1427,7 @@ static long do_sys_openat2(int dfd, const char __user *filename,
 		// Handle AT_FDCWD or resolve dfd to a path prefix
 		if (dfd == AT_FDCWD) {
 			// Using getname's result directly avoids unnecessary copy_from_user
-			strlcpy(resolved_path, tmp->name, PATH_MAX);
+			strscpy(resolved_path, tmp->name, PATH_MAX);
 		} else {
 			// Resolve the dfd to its absolute path
 			char *path = resolve_dfd_to_path(dfd, resolved_path, PATH_MAX);
