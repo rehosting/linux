@@ -3789,8 +3789,8 @@ int path_mount(const char *dev_name, struct path *path,
 		//printk(KERN_INFO "Penguin: Requested mount point: %s, Requested mount type: %s, Actual mount type: %s\n",
 		//		mount_point, type_page ? type_page : "NULL", mount_type);
 
-		if (strncmp("fuse", mount_type, 4) == 0) {
-			// We're mounting something at a fuse mount point. For example, we might be remounting /dev after we've set up our initial fuse mount
+		if (strncmp("hyperfs", mount_type, 4) == 0) {
+			// We're mounting something at a hyperfs mount point. For example, we might be remounting /dev after we've set up our initial hyperfs mount
 			// Let's check that it's one of the paths we care about: sys, dev, or proc. If so, we'll block it. Otherwise continue as normal
 			if (strncmp(mount_point, "dev", 3) == 0 ||
 				strncmp(mount_point, "sys", 3) == 0 ||
