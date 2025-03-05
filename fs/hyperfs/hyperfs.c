@@ -1,4 +1,5 @@
 #include <linux/file.h>
+#include <linux/fs_struct.h>
 #include <linux/hypercall.h>
 #include <linux/module.h>
 #include <linux/namei.h>
@@ -373,6 +374,7 @@ static void page_in_hyperfs_data(struct hyperfs_data *data)
 	case HYP_WRITE:
 		for (i = 0; i < data->write.size; i++)
 			x += data->write.buf[i];
+		break;
 	case HYP_GETATTR:
 		for (i = 0; i < sizeof(*data->getattr.size); i++)
 			x += ((unsigned char *)data->getattr.size)[i];
@@ -643,7 +645,7 @@ static int hyperfs_instantiate_common(struct inode *dir, struct dentry *dentry,
 	return 0;
 }
 
-static int hyperfs_create(struct inode *dir, struct dentry *dentry,
+static int hyperfs_create(struct mnt_idmap *idmap, struct inode *dir, struct dentry *dentry,
 			  umode_t mode, bool excl)
 {
 	struct dentry *real_dentry;
@@ -653,7 +655,7 @@ static int hyperfs_create(struct inode *dir, struct dentry *dentry,
 	if (IS_ERR(real_dentry))
 		return PTR_ERR(real_dentry);
 
-	err = vfs_create(real_dentry->d_parent->d_inode, real_dentry, mode,
+	err = vfs_create(idmap, real_dentry->d_parent->d_inode, real_dentry, mode,
 			 excl);
 	if (!err)
 		err = hyperfs_instantiate_common(dir, dentry, real_dentry);
@@ -663,9 +665,10 @@ static int hyperfs_create(struct inode *dir, struct dentry *dentry,
 }
 
 static int hyperfs_link(struct dentry *old, struct inode *new_dir,
-			struct dentry *new)
+	struct dentry *new)
 {
 	struct dentry *real_old, *real_new;
+	struct mnt_idmap *idmap;
 	int err;
 
 	real_old = hyperfs_get_real_dentry(old);
@@ -680,7 +683,14 @@ static int hyperfs_link(struct dentry *old, struct inode *new_dir,
 		goto put_old;
 	}
 
-	err = vfs_link(real_old, d_inode(real_new), real_new, NULL);
+	/* Get the idmap from current's mount */
+	idmap = mnt_idmap(current->fs->pwd.mnt);
+
+	/* Use the correct arguments for vfs_link */
+	err = vfs_link(real_old, idmap, d_inode(real_new->d_parent), real_new, NULL);
+
+	if (!err)
+		err = hyperfs_instantiate_common(new_dir, new, real_new);
 
 	dput(real_new);
 put_old:
@@ -692,20 +702,24 @@ out:
 static int hyperfs_unlink(struct inode *dir, struct dentry *dentry)
 {
 	struct dentry *real_dentry;
+	struct mnt_idmap *idmap;
 	int err;
 
 	real_dentry = hyperfs_get_real_dentry(dentry);
 	if (IS_ERR(real_dentry))
 		return PTR_ERR(real_dentry);
 
-	err = vfs_unlink(real_dentry->d_parent->d_inode, real_dentry, NULL);
+	/* Get the idmap from current's mount */
+	idmap = mnt_idmap(current->fs->pwd.mnt);
+
+	err = vfs_unlink(idmap, real_dentry->d_parent->d_inode, real_dentry, NULL);
 
 	dput(real_dentry);
 	return err;
 }
 
-static int hyperfs_symlink(struct inode *dir, struct dentry *dentry,
-			   const char *link)
+static int hyperfs_symlink(struct mnt_idmap *idmap, struct inode *dir, 
+			struct dentry *dentry, const char *link)
 {
 	struct dentry *real_dentry;
 	int err;
@@ -714,13 +728,14 @@ static int hyperfs_symlink(struct inode *dir, struct dentry *dentry,
 	if (IS_ERR(real_dentry))
 		return PTR_ERR(real_dentry);
 
-	err = vfs_symlink(real_dentry->d_parent->d_inode, real_dentry, link);
+	err = vfs_symlink(idmap, real_dentry->d_parent->d_inode, real_dentry, link);
 
 	dput(real_dentry);
 	return err;
 }
 
-static int hyperfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
+static int hyperfs_mkdir(struct mnt_idmap *idmap, struct inode *dir, 
+						struct dentry *dentry, umode_t mode)
 {
 	struct dentry *real_dentry;
 	int err;
@@ -729,7 +744,7 @@ static int hyperfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 	if (IS_ERR(real_dentry))
 		return PTR_ERR(real_dentry);
 
-	err = vfs_mkdir(real_dentry->d_parent->d_inode, real_dentry, mode);
+	err = vfs_mkdir(idmap, real_dentry->d_parent->d_inode, real_dentry, mode);
 
 	dput(real_dentry);
 	return err;
@@ -738,20 +753,24 @@ static int hyperfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 static int hyperfs_rmdir(struct inode *dir, struct dentry *dentry)
 {
 	struct dentry *real_dentry;
+	struct mnt_idmap *idmap;
 	int err;
 
 	real_dentry = hyperfs_get_real_dentry(dentry);
 	if (IS_ERR(real_dentry))
 		return PTR_ERR(real_dentry);
 
-	err = vfs_rmdir(real_dentry->d_parent->d_inode, real_dentry);
+	/* Get the idmap from current's mount */
+	idmap = mnt_idmap(current->fs->pwd.mnt);
+
+	err = vfs_rmdir(idmap, real_dentry->d_parent->d_inode, real_dentry);
 
 	dput(real_dentry);
 	return err;
 }
 
-static int hyperfs_mknod(struct inode *dir, struct dentry *dentry, umode_t mode,
-			 dev_t rdev)
+static int hyperfs_mknod(struct mnt_idmap *idmap, struct inode *dir, 
+			struct dentry *dentry, umode_t mode, dev_t rdev)
 {
 	struct dentry *real_dentry;
 	int err;
@@ -760,18 +779,19 @@ static int hyperfs_mknod(struct inode *dir, struct dentry *dentry, umode_t mode,
 	if (IS_ERR(real_dentry))
 		return PTR_ERR(real_dentry);
 
-	err = vfs_mknod(real_dentry->d_parent->d_inode, real_dentry, mode,
+	err = vfs_mknod(idmap, real_dentry->d_parent->d_inode, real_dentry, mode,
 			rdev);
 
 	dput(real_dentry);
 	return err;
 }
 
-static int hyperfs_rename(struct inode *old_dir, struct dentry *old,
-			  struct inode *new_dir, struct dentry *new,
+static int hyperfs_rename(struct mnt_idmap *idmap, struct inode *old_dir, 
+			  struct dentry *old, struct inode *new_dir, struct dentry *new,
 			  unsigned int flags)
 {
 	struct dentry *real_old, *real_new;
+	struct renamedata rd;
 	int err;
 
 	real_old = hyperfs_get_real_dentry(old);
@@ -786,8 +806,17 @@ static int hyperfs_rename(struct inode *old_dir, struct dentry *old,
 		goto put_old;
 	}
 
-	err = vfs_rename(real_old->d_parent->d_inode, real_old,
-			 real_new->d_parent->d_inode, real_new, NULL, flags);
+	/* Set up the renamedata structure */
+	rd.old_mnt_idmap = idmap;
+	rd.old_dir = real_old->d_parent->d_inode;
+	rd.old_dentry = real_old;
+	rd.new_mnt_idmap = idmap;
+	rd.new_dir = real_new->d_parent->d_inode;
+	rd.new_dentry = real_new;
+	rd.delegated_inode = NULL;
+	rd.flags = flags;
+
+	err = vfs_rename(&rd);
 
 	dput(real_new);
 put_old:
@@ -796,43 +825,51 @@ out:
 	return err;
 }
 
-static int hyperfs_getattr(struct vfsmount *mnt, struct dentry *dentry,
-			   struct kstat *stat)
+static int hyperfs_getattr(struct mnt_idmap *idmap, const struct path *path,
+                        struct kstat *stat, u32 request_mask,
+                        unsigned int query_flags)
 {
 	struct path real_path;
 	int err;
 
-	err = hyperfs_real_path(dentry, &real_path);
+	err = hyperfs_real_path(path->dentry, &real_path);
 	if (err < 0)
 		return err;
 
-	err = vfs_getattr(&real_path, stat);
+	/* 
+	 * In Linux 6.7, vfs_getattr takes 4 parameters:
+	 * - path: the path to get attributes from
+	 * - stat: where to store the attributes
+	 * - request_mask: what attributes to retrieve
+	 * - query_flags: special options for the query
+	 */
+	err = vfs_getattr(&real_path, stat, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
 
 	path_put(&real_path);
 	return err;
 }
 
-static int hyperfs_real_iter_actor(struct dir_context *ctx, const char *name,
-				   int name_len, loff_t offset, u64 ino,
-				   unsigned int d_type)
+static bool hyperfs_real_iter_actor(struct dir_context *ctx, const char *name,
+                                  int name_len, loff_t offset, u64 ino,
+                                  unsigned int d_type)
 {
 	struct hyperfs_iterate_data *iter_data =
 		(struct hyperfs_iterate_data *)ctx;
 
 	// Skip emitting dots, because we did that already
 	if (!strncmp(name, ".", name_len) || !strncmp(name, "..", name_len))
-		return 0;
+		return true;
 
 	// Filter duplicates with hyperfs-managed files
 	if (iter_data->tree &&
 	    hyperfs_dir_lookup(&iter_data->tree->dir_entries, name, name_len))
-		return 0;
+		return true;
 
 	if (!dir_emit(iter_data->hyperfs_ctx, name, name_len, get_next_ino(),
 		      d_type))
-		return 1;
+		return false;
 
-	return 0;
+	return true;
 }
 
 static int hyperfs_iterate(struct file *file, struct dir_context *ctx)
@@ -906,25 +943,25 @@ out:
 	return err;
 }
 
-static int hyperfs_readpage(struct file *file, struct page *page)
+static int hyperfs_read_folio(struct file *file, struct folio *folio)
 {
 	struct hyperfs_tree *tree = file->f_inode->i_private;
 	void *data;
 
-	data = kmap(page);
+	data = kmap_local_folio(folio, 0);
 
 	hyp_file_op((struct hyperfs_data){
 		.type = HYP_READ,
 		.path = tree->path,
 		.read.buf = data,
-		.read.size = PAGE_SIZE,
-		.read.offset = page_offset(page),
+		.read.size = folio_size(folio),
+		.read.offset = folio_pos(folio),
 	});
 
-	kunmap(page);
-	flush_dcache_page(page);
-	SetPageUptodate(page);
-	unlock_page(page);
+	kunmap_local(data);
+	flush_dcache_folio(folio);
+	folio_mark_uptodate(folio);
+	folio_unlock(folio);
 
 	return 0;
 }
@@ -1009,11 +1046,11 @@ static const struct inode_operations hyperfs_inode_operations = {
 static const struct file_operations hyperfs_dir_operations = {
 	.read = generic_read_dir,
 	.open = generic_file_open,
-	.iterate = hyperfs_iterate,
+	.iterate_shared = hyperfs_iterate,  // Changed from .iterate to .iterate_shared
 };
 
 static const struct address_space_operations hyperfs_aops = {
-	.readpage = hyperfs_readpage,
+	.read_folio = hyperfs_read_folio,
 	.writepage = hyperfs_writepage,
 };
 
@@ -1062,9 +1099,13 @@ static struct inode *hyperfs_wrap_real_inode(struct super_block *sb,
 	inode->i_gid = real->i_gid;
 	inode->i_mode = real->i_mode;
 	inode->i_rdev = real->i_rdev;
-	inode->i_atime = real->i_atime;
-	inode->i_mtime = real->i_mtime;
-	inode->i_ctime = real->i_ctime;
+	inode->i_atime_sec = real->i_atime_sec;
+	inode->i_atime_nsec = real->i_atime_nsec;
+	inode->i_mtime_sec = real->i_mtime_sec;
+	inode->i_mtime_nsec = real->i_mtime_nsec;
+	inode->i_ctime_sec = real->i_ctime_sec;
+	inode->i_ctime_nsec = real->i_ctime_nsec;
+	
 	i_size_write(inode, i_size_read(real));
 	switch (real->i_mode & S_IFMT) {
 	case S_IFDIR:
@@ -1258,7 +1299,7 @@ out:
 	return err;
 }
 
-struct dentry *hyperfs_mount(struct file_system_type *fs_type, int flags,
+static struct dentry *hyperfs_mount(struct file_system_type *fs_type, int flags,
 			     const char *dev_name, void *raw_data)
 {
 	return mount_nodev(fs_type, flags, raw_data, hyperfs_fill_super);
