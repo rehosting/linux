@@ -140,7 +140,8 @@ static int mmap_ret_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
     struct task_struct *task = current;
     struct mm_struct *mm = task->mm;
     struct vm_area_struct *vma;
-    vma_update_t vma_update = {0};
+    VMA_ITERATOR(vmi, mm, 0);
+    vma_update_t vma_update = { 0 };
     unsigned long mmap_start = get_return_value(regs); // New start address
 
     if (is_mmap_error(mmap_start) || mmap_start == (unsigned long)-ENOMEM || mmap_start == (unsigned long)-1) {
@@ -152,9 +153,9 @@ static int mmap_ret_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
     return 0;
 }
 
-
+    mmap_read_lock(mm);
     /* Find the VMA corresponding to the mmap_start address */
-    for (vma = mm->mmap; vma; vma = vma->vm_next) {
+    for_each_vma(vmi, vma) {
         if (vma->vm_start == mmap_start) {
             /* Found the newly mapped VMA */
             break;
@@ -186,6 +187,7 @@ static int mmap_ret_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
     printk(KERN_ERR "New VMA: Name: %s Start: 0x%llx, End: 0x%llx\n",
             vma_update.name, (uint64_t)vma->vm_start, (uint64_t)vma->vm_end);
 #endif
+    mmap_read_unlock(mm);
     return 0;
 }
 
@@ -323,7 +325,7 @@ static int finish_task_switch_hook(struct kprobe *kp, struct pt_regs *regs) {
 
     next_flags = READ_ONCE(next->flags);
 
-    if (!(next_flags & (PF_KTHREAD | PF_EXITING | PF_EXITPIDONE))) {
+    if (!(next_flags & (PF_KTHREAD | PF_EXITING))) {
         // For user-space tasks, set tgid and start_time
         struct task_struct *parent;
 
