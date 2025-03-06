@@ -1312,7 +1312,7 @@ static int override_release(char __user *release, size_t len)
 	return ret;
 }
 
-void make_igloo_utsname(char *buf, struct new_utsname __user *name){
+static void make_igloo_utsname(char *buf, struct new_utsname __user *name){
 	char *token, *str;
 	char *array[6];
 	int result;
