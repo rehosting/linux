@@ -68,7 +68,6 @@
 #include <linux/user_events.h>
 #include <linux/rseq.h>
 #include <linux/ksm.h>
-#include <linux/igloo.h>
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
@@ -1957,72 +1956,70 @@ static int do_execveat_common(int fd, struct filename *filename,
 
 	retval = bprm_execve(bprm);
 
-	if (igloo_do_hc) {
-	  mutex_lock(&execve_mutex);		//prevents other kernel threads from issuing interleaved sequences of hypercalls
-
-	  if (current->flags & PF_KTHREAD) {
-		// Kernel thread change
-		igloo_hypercall(IGLOO_HYP_KTHREAD_CHANGE, (unsigned long)filename->name);
-	  } else {
-		// Normal thread change
-		igloo_hypercall(IGLOO_HYP_THREAD_CHANGE, (unsigned long)filename->name);
-		igloo_hypercall(IGLOO_SIGSTOP_KTHREAD, (unsigned long)filename->name);
-	  }
-	  char __user **argv_ptr;
-	  char __user **envp_ptr;
-	  char *arg;
-	  char arg_buf[256];
-	  int i;
-  #ifdef CONFIG_COMPAT
-	if (argv.is_compat)
-		argv_ptr = (char __user **)argv.ptr.compat;
-	else
-  #endif
-		argv_ptr = (char __user **)argv.ptr.native;
-  
-	  for (i = 0; i < bprm->argc; ++i) {
-		  const char __user *arg = get_user_arg_ptr(argv, i);
-		  if (!arg){
-			  break;
-		  }
-		  if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) < 0){
-			  break;
-		  }
-		  //printk(KERN_CRIT "Arg %d: %s\n", i, arg_buf);
-		  igloo_hypercall2(IGLOO_HYP_TASK_ARGV, (unsigned long) arg_buf, i);	//do a hypercall with each argv buffer and associated index
-		  igloo_hypercall2(IGLOO_SIGSTOP_ARGV, (unsigned long) arg_buf, i);
-	  }
-	  igloo_hypercall(IGLOO_HYP_TASK_ARGC, bprm->argc);
-	#ifdef CONFIG_COMPAT
-	  if (envp.is_compat)
-		  envp_ptr = (char __user **)envp.ptr.compat;
-	  else
-	#endif
-		  envp_ptr = (char __user **)envp.ptr.native;
 	
-		for (i = 0; i < bprm->envc; ++i) {
-			const char __user *arg = get_user_arg_ptr(envp, i);
-			if (!arg){
+	/* execve succeeded */
+	if (igloo_do_hc) {
+		char arg_buf[256];
+		int i;
+		if (current->flags & PF_KTHREAD) {
+			// Kernel thread change
+			igloo_hypercall(IGLOO_HYP_KTHREAD_CHANGE, (unsigned long)filename->name);
+		} else {
+			// Normal thread change
+			igloo_hypercall(IGLOO_HYP_THREAD_CHANGE, (unsigned long)filename->name);
+			igloo_hypercall(IGLOO_SIGSTOP_KTHREAD, (unsigned long)filename->name);
+		}
+		
+		mutex_lock(&execve_mutex);		//prevents other kernel threads from issuing interleaved sequences of hypercalls
+		
+		for (i = 0; i < bprm->argc; ++i) {
+			const char __user *arg = get_user_arg_ptr(argv, i);
+			if (!arg) {
 				break;
 			}
-
-			if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) < 0){
+			if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) < 0) {
 				break;
-			}	
-			igloo_hypercall2(IGLOO_HYP_TASK_ENVV, (unsigned long) arg_buf, i);	//do a hypercall with each envp buffer and associated index
+			}
+			//printk(KERN_CRIT "Arg %d: %s\n", i, arg_buf);
+			//do a hypercall with each argv buffer and associated index
+			igloo_hypercall2(IGLOO_HYP_TASK_ARGV, (unsigned long) arg_buf, i);
+			igloo_hypercall2(IGLOO_SIGSTOP_ARGV, (unsigned long) arg_buf, i);
 		}
-		igloo_hypercall(IGLOO_HYP_TASK_ENVV, bprm->envc);
+		igloo_hypercall(IGLOO_HYP_TASK_ARGC, bprm->argc);
+		if ((retval = bprm->envc) < 0) {
+			if (igloo_do_hc) {
+				//unlock the mutex in case of early exit
+				printk(KERN_CRIT "EXITING BEFORE ENVP ENUMERATION\n");
+				mutex_unlock(&execve_mutex);
+			}
+			goto out_free;
+		}
+
+		for (i = 0; i < bprm->envc; ++i) {
+			const char __user *arg = get_user_arg_ptr(envp, i);
+			if (!arg) {
+				break;
+			}
+			if (strncpy_from_user(arg_buf, arg, sizeof(arg_buf)) < 0) {
+				break;
+			}
+			//printk(KERN_CRIT "Env %d: %s\n", i, arg_buf);
+			igloo_hypercall2(IGLOO_HYP_TASK_ENVV, (unsigned long) arg_buf, i);
+		}
+		igloo_hypercall(IGLOO_HYP_TASK_ENVC, bprm->envc);
 		//the creds are set in the call to prepare_binprm above
 		//printk(KERN_CRIT "EUID: %u, EGID: %u\n", bprm->cred->euid.val, bprm->cred->egid.val);
 		igloo_hypercall(IGLOO_HYP_TASK_EUID, bprm->cred->euid.val);
 		igloo_hypercall(IGLOO_HYP_TASK_EGID, bprm->cred->egid.val);
+
+		mutex_unlock(&execve_mutex);
+
 		// Pause process until SIGCONT, if emulator wants to
 		bool do_pause = false;
 		igloo_hypercall2(IGLOO_SIGSTOP_QUERY, (unsigned long) &do_pause, current->pid);
 		if (do_pause) {
 			force_sig(SIGSTOP);
 		}
-		mutex_unlock(&execve_mutex);
 	}
 out_free:
 	free_bprm(bprm);
@@ -2038,6 +2035,38 @@ int kernel_execve(const char *kernel_filename,
 	struct linux_binprm *bprm;
 	int fd = AT_FDCWD;
 	int retval;
+
+	/* It is non-sense for kernel threads to call execve */
+	if (WARN_ON_ONCE(current->flags & PF_KTHREAD))
+		return -EINVAL;
+
+	filename = getname_kernel(kernel_filename);
+	if (IS_ERR(filename))
+		return PTR_ERR(filename);
+
+	bprm = alloc_bprm(fd, filename, 0);
+	if (IS_ERR(bprm)) {
+		retval = PTR_ERR(bprm);
+		goto out_ret;
+	}
+
+	retval = count_strings_kernel(argv);
+	if (WARN_ON_ONCE(retval == 0))
+		retval = -EINVAL;
+	if (retval < 0)
+		goto out_free;
+	bprm->argc = retval;
+
+	retval = count_strings_kernel(envp);
+	if (retval < 0)
+		goto out_free;
+	bprm->envc = retval;
+
+	retval = bprm_stack_limits(bprm);
+	if (retval < 0)
+		goto out_free;
+
+	retval = copy_string_kernel(bprm->filename, bprm);
 	if (retval < 0)
 		goto out_free;
 	bprm->exec = bprm->p;
@@ -2053,6 +2082,7 @@ int kernel_execve(const char *kernel_filename,
 	retval = bprm_execve(bprm);
 out_free:
 	free_bprm(bprm);
+out_ret:
 	putname(filename);
 	return retval;
 }
