@@ -781,6 +781,8 @@ static int hyperfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 
 	err = vfs_mknod(idmap, real_dentry->d_parent->d_inode, real_dentry, mode,
 			rdev);
+	if (!err)
+		err = hyperfs_instantiate_common(dir, dentry, real_dentry);
 
 	dput(real_dentry);
 	return err;
