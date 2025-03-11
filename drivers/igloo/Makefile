@@ -1,0 +1,1 @@
+obj-y += igloo_hc.o vma_hc.o exec_hc.o

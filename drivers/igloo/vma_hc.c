@@ -7,44 +7,8 @@
 #include <linux/slab.h>
 #include <linux/hypercall.h>
 #include <linux/igloo.h>
-
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Andrew");
-MODULE_DESCRIPTION("Kretprobe-based VMA change logging");
-MODULE_VERSION("0.1");
-
-#define MAX_PROBES 20
-#define HC_TASK_CHANGE 590
-#define HC_VMA_UPDATE 591
-// #define DEBUG_PRINT
-
-// Enum for types of VMA updates - insert, remove, update
-typedef enum {
-    VMA_INSERT,
-    VMA_REMOVE,
-    VMA_UPDATE
-} vma_update_type_t;
-
-// Struct to hold VMA update information
-typedef struct {
-    vma_update_type_t type;      // Type of update
-    uint64_t start_addr;         // Start of the VMA
-    uint64_t end_addr;           // End of the VMA
-    char name[256];              // Name (or NULL for anonymous mappings)
-
-    // Optional old value for VMA_UPDATE
-    uint64_t old_start_addr;     // Old start (for VMA_UPDATE only)
-} vma_update_t;
-
-// Stuct to hold task information, shared via hypercall
-typedef struct {
-    uint32_t tgid; // TGID for userspace tasks, PID for kernel threads
-    uint32_t start_time;
-    uint32_t parent_tgid;
-    uint32_t parent_start_time;
-    uint32_t is_kernel;  // Flag to indicate if it's a kernel thread
-    char comm[TASK_COMM_LEN]; // 16 bytes for task name
-} task_info_t;
+#include "vma_hc.h"
+#include "args.h"
 
 /* Define kprobe and kretprobe structures */
 static struct kretprobe mmap_retprobe;
@@ -53,87 +17,6 @@ static struct kretprobe mremap_retprobe;
 static struct kretprobe brk_retprobe;
 static struct kprobe exit_probe;
 static struct kprobe switch_probe;
-
-/* Passing data between entrance and exit of target functions */
-struct munmap_data {
-    unsigned long start_addr;
-    unsigned long length;
-};
-
-struct mremap_data {
-    unsigned long old_addr;  // Old start address
-};
-
-struct brk_data {
-    unsigned long requested_brk;  // Requested brk address
-    unsigned long old_brk;  // Old brk address
-};
-
-/* Architecture-specific function to retrieve syscall number */
-static inline int get_syscall_number(struct pt_regs *regs) {
-#ifdef CONFIG_X86_64
-    return regs->orig_ax;
-#elif defined(CONFIG_ARM) || defined(CONFIG_ARMEB)
-    #if defined(__thumb__) || defined(__thumb2__) || defined(CONFIG_THUMB2_KERNEL)
-        return regs->uregs[7];  // Syscall number is in r7 in Thumb mode
-    #else
-        return regs->ARM_r7;    // Syscall number is in r7 in ARM mode
-    #endif
-#elif defined(CONFIG_ARM64)
-    return regs->regs[8];  // Syscall number is stored in x8 in ARM64
-#elif defined(CONFIG_MIPS) || defined(CONFIG_MIPS64)
-    return regs->regs[2];  // Syscall number is in v0 for MIPS
-#else
-    #error "Unsupported architecture"
-#endif
-}
-
-static inline unsigned long get_first_syscall_arg(struct pt_regs *regs) {
-#ifdef CONFIG_X86_64
-    return regs->di;  // 1st argument in di
-#elif defined(CONFIG_ARM) || defined(CONFIG_ARMEB)
-    return regs->ARM_r0;  // 1st argument in r0
-#elif defined(CONFIG_ARM64)
-    return regs->regs[0];  // 1st argument in x0
-#elif defined(CONFIG_MIPS) || defined(CONFIG_MIPS64)
-    return regs->regs[4];  // 1st argument in a0 (regs[4])
-#else
-    #error "Unsupported architecture"
-#endif
-}
-
-static inline unsigned long get_second_syscall_arg(struct pt_regs *regs) {
-#ifdef CONFIG_X86_64
-    return regs->si;  // 2nd argument in si
-#elif defined(CONFIG_ARM) || defined(CONFIG_ARMEB)
-    return regs->ARM_r1;  // 2nd argument in r1
-#elif defined(CONFIG_ARM64)
-    return regs->regs[1];  // 2nd argument in x1
-#elif defined(CONFIG_MIPS) || defined(CONFIG_MIPS64)
-    return regs->regs[5];  // 2nd argument in a1 (regs[5])
-#else
-    #error "Unsupported architecture"
-#endif
-}
-
-static inline unsigned long get_return_value(struct pt_regs *regs) {
-#ifdef CONFIG_X86_64
-    return regs->ax;  // Return value in ax
-#elif defined(CONFIG_ARM) || defined(CONFIG_ARMEB)
-    return regs->ARM_r0;  // Return value in r0
-#elif defined(CONFIG_ARM64)
-    return regs->regs[0];  // Return value in x0
-#elif defined(CONFIG_MIPS) || defined(CONFIG_MIPS64)
-    return regs->regs[2];  // Return value in v0 (regs[2])
-#else
-    #error "Unsupported architecture"
-#endif
-}
-
-// Check if an mmap return value is an error based on TASK_SIZE
-static inline int is_mmap_error(unsigned long addr) {
-    return addr >= TASK_SIZE;
-}
 
 /* Post-mmap handler (after mmap completes) */
 // Log a VMA_insert event with the new VMA information
@@ -368,7 +251,7 @@ static int finish_task_switch_hook(struct kprobe *kp, struct pt_regs *regs) {
 }
 
 /* Register probes for mmap and munmap */
-int __init gva_hc_init(void) {
+int vma_hc_init(void) {
     int ret = 0;
     if (!igloo_log_cov) {
         return 0;
@@ -442,12 +325,3 @@ int __init gva_hc_init(void) {
     printk(KERN_ERR "Kprobes registered\n");
     return 0;
 }
-
-/* Unregister probes */
-static void __exit gva_hc_exit(void) {
-    // Unreachable, module is built in
-    printk(KERN_ERR "TODO\n");
-}
-
-module_init(gva_hc_init);
-module_exit(gva_hc_exit);
