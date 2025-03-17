@@ -69,7 +69,7 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
 	register unsigned long reg1 asm("a1") = arg1;
 
     asm volatile(
-        "xori $0, $0, 0"
+        "xori x0, x0, 0"
         : "+r"(reg0)
         : "r"(reg1)
         : "memory"
@@ -160,7 +160,7 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
 	register unsigned long reg2 asm("a2") = arg2;
 
     asm volatile(
-        "xori $0, $0, 0"
+        "xori x0, x0, 0"
         : "+r"(reg0)
         : "r"(reg1), "r" (reg2) 
         : "memory"
