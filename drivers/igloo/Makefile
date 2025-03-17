@@ -1,1 +1,1 @@
-obj-y += igloo_hc.o  vma_hc.o syscalls_hc.o exec_hc.o igloo_hc.o open_hc.o
+obj-y += igloo_hc.o  vma_hc.o syscalls_hc.o exec_hc.o igloo_hc.o open_hc.o sock_hc.o
