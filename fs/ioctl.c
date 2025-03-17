@@ -612,6 +612,11 @@ out:
 	return ret;
 }
 
+#ifdef CONFIG_IGLOO
+// forward declare igloo_ioctl
+void igloo_ioctl(int error, struct inode *inode, struct file *filp, unsigned int cmd, void __user * argp);
+#endif
+
 /*
  * When you add any new common ioctls to the switches above and below
  * please update compat_sys_ioctl() too.
@@ -683,6 +688,11 @@ int do_vfs_ioctl(struct file *filp, unsigned int fd, unsigned int cmd,
 			error = vfs_ioctl(filp, cmd, arg);
 		break;
 	}
+
+#ifdef CONFIG_IGLOO
+	igloo_ioctl(error, inode, filp, cmd, argp);
+#endif
+
 	return error;
 }
 
