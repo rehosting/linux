@@ -92,6 +92,20 @@ static int __init early_igloo_do_hc(char *p)
 }
 early_param("igloo_do_hc", early_igloo_do_hc);
 
+bool igloo_log_cov = false;
+static int __init early_igloo_log_cov(char *p)
+{
+    unsigned long log_cov;
+    if (kstrtoul(p, 0, &log_cov) < 0 ) {
+        pr_warn("Could not parse igloo_log_cov parameter %s\n", p);
+        return -1;
+    }
+	igloo_log_cov = (log_cov > 0);
+    pr_warn_once("Using igloo_log_cov: %d\n", igloo_log_cov);
+    return 0;
+}
+early_param("igloo_log_cov", early_igloo_log_cov);
+
 #ifdef CONFIG_HAVE_ARCH_MMAP_RND_BITS
 const int mmap_rnd_bits_min = CONFIG_ARCH_MMAP_RND_BITS_MIN;
 int mmap_rnd_bits_max __ro_after_init = CONFIG_ARCH_MMAP_RND_BITS_MAX;
