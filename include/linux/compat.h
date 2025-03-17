@@ -62,27 +62,64 @@
 #define COMPAT_SYSCALL_DEFINE6(name, ...) \
 	COMPAT_SYSCALL_DEFINEx(6, _##name, __VA_ARGS__)
 
+
+// === Igloo Interception Support ===
+#include <igloo_syscall_macros.h>
+
+#ifdef CONFIG_IGLOO
+extern igloo_syscall_enter_t igloo_syscall_enter_hook;
+extern igloo_syscall_return_t igloo_syscall_return_hook;
+#endif
+
 /*
  * The asmlinkage stub is aliased to a function named __se_compat_sys_*() which
  * sign-extends 32-bit ints to longs whenever needed. The actual work is
  * done within __do_compat_sys_*().
  */
 #ifndef COMPAT_SYSCALL_DEFINEx
-#define COMPAT_SYSCALL_DEFINEx(x, name, ...)					\
-	__diag_push();								\
-	__diag_ignore(GCC, 8, "-Wattribute-alias",				\
-		      "Type aliasing is used to sanitize syscall arguments");\
-	asmlinkage long compat_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))	\
-		__attribute__((alias(__stringify(__se_compat_sys##name))));	\
-	ALLOW_ERROR_INJECTION(compat_sys##name, ERRNO);				\
-	static inline long __do_compat_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__));\
-	asmlinkage long __se_compat_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__));	\
-	asmlinkage long __se_compat_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__))	\
-	{									\
-		long ret = __do_compat_sys##name(__MAP(x,__SC_DELOUSE,__VA_ARGS__));\
-		__MAP(x,__SC_TEST,__VA_ARGS__);					\
-		return ret;							\
-	}									\
+#define COMPAT_SYSCALL_DEFINEx(x, name, ...)                                  \
+	__diag_push();                                                        \
+	__diag_ignore(GCC, 8, "-Wattribute-alias",                            \
+		      "Type aliasing is used to sanitize syscall arguments"); \
+	asmlinkage long compat_sys##name(__MAP(x, __SC_DECL, __VA_ARGS__))    \
+		__attribute__((alias(__stringify(__se_compat_sys##name))));   \
+	ALLOW_ERROR_INJECTION(compat_sys##name, ERRNO);                       \
+	void __igloo_set_args_compat##name(const unsigned long args_ptr_array[], const __le64 new_args_le64[]); \
+	void __igloo_set_args_compat##name(const unsigned long args_ptr_array[], const __le64 new_args_le64[]) \
+	{ __SC_GEN_SETTER_BODY_WRAPPER(x, __VA_ARGS__); }					\
+	static inline long __do_compat_sys##name(                             \
+		__MAP(x, __SC_DECL, __VA_ARGS__));                            \
+	asmlinkage long __se_compat_sys##name(                                \
+		__MAP(x, __SC_LONG, __VA_ARGS__));                            \
+	asmlinkage long __se_compat_sys##name(                                \
+		__MAP(x, __SC_LONG, __VA_ARGS__))                             \
+	{                                                                     \
+		long ret;                                                     \
+		bool skip = false;                                            \
+		long skip_ret = 0;                                            \
+		unsigned long args_ptr_array[IGLOO_SYSCALL_MAXARGS] = { 0 };  \
+		__SC_ASSIGN_ADDR_WRAPPER(x, args_ptr_array, __VA_ARGS__);     \
+		/* Igloo enter hook */                                        \
+		if (igloo_syscall_enter_hook) {                               \
+			skip = igloo_syscall_enter_hook(                      \
+				__stringify(name), &skip_ret, x,              \
+				args_ptr_array,                               \
+				__igloo_set_args_compat##name);               \
+		}                                                             \
+		if (skip) {                                                   \
+			ret = skip_ret;                                       \
+		} else {                                                      \
+			ret = __do_compat_sys##name(                          \
+				__MAP(x, __SC_DELOUSE, __VA_ARGS__));         \
+		}                                                             \
+		/* Igloo return hook */                                       \
+		if (igloo_syscall_return_hook) {                              \
+			ret = igloo_syscall_return_hook(                      \
+				__stringify(name), ret, x, args_ptr_array);   \
+		}                                                             \
+		__MAP(x,__SC_TEST, __VA_ARGS__);				\
+		return ret;    					\
+}									\
 	__diag_pop();								\
 	static inline long __do_compat_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))
 #endif /* COMPAT_SYSCALL_DEFINEx */
