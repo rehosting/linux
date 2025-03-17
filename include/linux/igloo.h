@@ -6,6 +6,8 @@ extern bool igloo_do_hc; // mmap.c
 
 #define IGLOO_HYP_KTHREAD_CHANGE 595
 #define IGLOO_HYP_THREAD_CHANGE 596
+#define IGLOO_IOCTL_ENOTTY 105
+
 #define IGLOO_HYP_TASK_ARGV 597
 #define IGLOO_HYP_TASK_ARGC 598
 #define IGLOO_HYP_TASK_ENVV 599
