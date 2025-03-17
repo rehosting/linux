@@ -60,6 +60,21 @@ static int __init early_igloo_log_cov(char *p)
 }
 early_param("igloo_log_cov", early_igloo_log_cov);
 
+unsigned long igloo_task_size = 0;
+static int __init early_igloo_task_size(char *p)
+{
+    unsigned long task_size;
+    if (kstrtoul(p, 0, &task_size) < 0 ) {
+        pr_warn("Could not parse igloo_task_size parameter %s\n", p);
+        return -1;
+    }
+    igloo_task_size = task_size;
+    pr_warn_once("Using igloo_task_size: 0x%lx\n", igloo_task_size);
+    return 0;
+}
+
+early_param("igloo_task_size", early_igloo_task_size);
+
 /* Register probes for mmap and munmap */
 static int __init igloo_hc_init(void) {
 	printk(KERN_EMERG "IGLOO: Initializing\n");
