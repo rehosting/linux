@@ -91,6 +91,8 @@ struct xattr_args;
 #include <linux/quota.h>
 #include <linux/key.h>
 #include <linux/personality.h>
+#include <linux/igloo.h>
+#include <linux/hypercall.h>
 #include <trace/syscall.h>
 
 #ifdef CONFIG_ARCH_HAS_SYSCALL_WRAPPER
@@ -121,6 +123,15 @@ struct xattr_args;
 #define __MAP5(m,t,a,...) m(t,a), __MAP4(m,__VA_ARGS__)
 #define __MAP6(m,t,a,...) m(t,a), __MAP5(m,__VA_ARGS__)
 #define __MAP(n,...) __MAP##n(__VA_ARGS__)
+
+#define __LMAP0(m,...)
+#define __LMAP1(m,t,a,...) (uint64_t) m(t,a)
+#define __LMAP2(m,t,a,...) (uint64_t) m(t,a), __LMAP1(m,__VA_ARGS__)
+#define __LMAP3(m,t,a,...) (uint64_t) m(t,a), __LMAP2(m,__VA_ARGS__)
+#define __LMAP4(m,t,a,...) (uint64_t) m(t,a), __LMAP3(m,__VA_ARGS__)
+#define __LMAP5(m,t,a,...) (uint64_t) m(t,a), __LMAP4(m,__VA_ARGS__)
+#define __LMAP6(m,t,a,...) (uint64_t) m(t,a), __LMAP5(m,__VA_ARGS__)
+#define __LMAP(n,...) __LMAP##n(__VA_ARGS__)
 
 #define __SC_DECL(t, a)	t a
 #define __TYPE_AS(t, v)	__same_type((__force t)0, v)
@@ -234,33 +245,206 @@ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
 	SYSCALL_METADATA(sname, x, __VA_ARGS__)			\
 	__SYSCALL_DEFINEx(x, sname, __VA_ARGS__)
 
+long igloo_hc_syscall_enter(char* name, uint64_t nr, int nb_args, uint64_t **args_ptrs, long *ret);
+long igloo_hc_syscall_return(char* name, uint64_t nr, int nb_args, uint64_t **args_ptrs, long *ret);
+
+
+
+
+
+
 #define __PROTECT(...) asmlinkage_protect(__VA_ARGS__)
 
+/* Creates a modifiable copy of each argument */
+#define __SC_DECL_COPY1(t, a) t a##_copy = a;
+#define __SC_DECL_COPY2(t, a, b) t a##_copy = a; t b##_copy = b;
+/* Define for more arguments as needed */
+
+/* Gets address of each argument copy */
+#define __SC_ADDR1(t, a) (uint64_t*)&a##_copy
+#define __SC_ADDR2(t, a, b) (uint64_t*)&a##_copy, (uint64_t*)&b##_copy
+/* Define for more arguments as needed */
+
+/* References the copies instead of the originals */
+#define __SC_ARG_COPY1(t, a) a##_copy
+#define __SC_ARG_COPY2(t, a, b) a##_copy, b##_copy
+
+/* Macros to define modifiable copies of arguments */
+#define __SC_DECL_MOD1(t1, a1) \
+    t1 a1##_mod;
+
+#define __SC_DECL_MOD2(t1, a1, t2, a2) \
+	__SC_DECL_MOD1(t1, a1) \
+    t2 a2##_mod;
+
+#define __SC_DECL_MOD3(t1, a1, t2, a2, t3, a3) \
+	__SC_DECL_MOD2(t1, a1, t2, a2) \
+    t3 a3##_mod;
+
+#define __SC_DECL_MOD4(t1, a1, t2, a2, t3, a3, t4, a4) \
+	__SC_DECL_MOD3(t1, a1, t2, a2, t3, a3) \
+    t4 a4##_mod;
+
+#define __SC_DECL_MOD5(t1, a1, t2, a2, t3, a3, t4, a4, t5, a5) \
+	__SC_DECL_MOD4(t1, a1, t2, a2, t3, a3, t4, a4) \
+    t5 a5##_mod;
+
+#define __SC_DECL_MOD6(t1, a1, t2, a2, t3, a3, t4, a4, t5, a5, t6, a6) \
+	__SC_DECL_MOD5(t1, a1, t2, a2, t3, a3, t4, a4, t5, a5) \
+    t6 a6##_mod;
+
+/* Macros to copy original values to modifiable copies */
+#define __SC_COPY_ARGS1(t1, a1) \
+    a1##_mod = (t1)a1;
+
+#define __SC_COPY_ARGS2(t1, a1, t2, a2) \
+    a1##_mod = (t1)a1; \
+    a2##_mod = (t2)a2;
+
+#define __SC_COPY_ARGS3(t1, a1, t2, a2, t3, a3) \
+    a1##_mod = (t1)a1; \
+    a2##_mod = (t2)a2; \
+    a3##_mod = (t3)a3;
+
+#define __SC_COPY_ARGS4(t1, a1, t2, a2, t3, a3, t4, a4) \
+    a1##_mod = (t1)a1; \
+    a2##_mod = (t2)a2; \
+    a3##_mod = (t3)a3; \
+    a4##_mod = (t4)a4;
+
+#define __SC_COPY_ARGS5(t1, a1, t2, a2, t3, a3, t4, a4, t5, a5) \
+    a1##_mod = (t1)a1; \
+    a2##_mod = (t2)a2; \
+    a3##_mod = (t3)a3; \
+    a4##_mod = (t4)a4; \
+    a5##_mod = (t5)a5;
+
+#define __SC_COPY_ARGS6(t1, a1, t2, a2, t3, a3, t4, a4, t5, a5, t6, a6) \
+    a1##_mod = (t1)a1; \
+    a2##_mod = (t2)a2; \
+    a3##_mod = (t3)a3; \
+    a4##_mod = (t4)a4; \
+    a5##_mod = (t5)a5; \
+    a6##_mod = (t6)a6;
+
+/* Macros to get addresses of modifiable arguments */
+#define __SC_ADDR_MOD1(t1, a1) \
+    (uint64_t *)&a1##_mod
+
+#define __SC_ADDR_MOD2(t1, a1, t2, a2) \
+    (uint64_t *)&a1##_mod, (uint64_t *)&a2##_mod
+
+#define __SC_ADDR_MOD3(t1, a1, t2, a2, t3, a3) \
+    (uint64_t *)&a1##_mod, (uint64_t *)&a2##_mod, (uint64_t *)&a3##_mod
+
+#define __SC_ADDR_MOD4(t1, a1, t2, a2, t3, a3, t4, a4) \
+    (uint64_t *)&a1##_mod, (uint64_t *)&a2##_mod, (uint64_t *)&a3##_mod, \
+    (uint64_t *)&a4##_mod
+
+#define __SC_ADDR_MOD5(t1, a1, t2, a2, t3, a3, t4, a4, t5, a5) \
+    (uint64_t *)&a1##_mod, (uint64_t *)&a2##_mod, (uint64_t *)&a3##_mod, \
+    (uint64_t *)&a4##_mod, (uint64_t *)&a5##_mod
+
+#define __SC_ADDR_MOD6(t1, a1, t2, a2, t3, a3, t4, a4, t5, a5, t6, a6) \
+    (uint64_t *)&a1##_mod, (uint64_t *)&a2##_mod, (uint64_t *)&a3##_mod, \
+    (uint64_t *)&a4##_mod, (uint64_t *)&a5##_mod, (uint64_t *)&a6##_mod
+
+/* Macros to use modifiable arguments when calling the function */
+#define __SC_ARGS_MOD1(t1, a1) \
+    a1##_mod
+
+#define __SC_ARGS_MOD2(t1, a1, t2, a2) \
+    a1##_mod, a2##_mod
+
+#define __SC_ARGS_MOD3(t1, a1, t2, a2, t3, a3) \
+    a1##_mod, a2##_mod, a3##_mod
+
+#define __SC_ARGS_MOD4(t1, a1, t2, a2, t3, a3, t4, a4) \
+    a1##_mod, a2##_mod, a3##_mod, a4##_mod
+
+#define __SC_ARGS_MOD5(t1, a1, t2, a2, t3, a3, t4, a4, t5, a5) \
+    a1##_mod, a2##_mod, a3##_mod, a4##_mod, a5##_mod
+
+#define __SC_ARGS_MOD6(t1, a1, t2, a2, t3, a3, t4, a4, t5, a5, t6, a6) \
+    a1##_mod, a2##_mod, a3##_mod, a4##_mod, a5##_mod, a6##_mod
+/* Define for more arguments as needed */
 /*
  * The asmlinkage stub is aliased to a function named __se_sys_*() which
  * sign-extends 32-bit ints to longs whenever needed. The actual work is
  * done within __do_sys_*().
  */
 #ifndef __SYSCALL_DEFINEx
-#define __SYSCALL_DEFINEx(x, name, ...)					\
-	__diag_push();							\
-	__diag_ignore(GCC, 8, "-Wattribute-alias",			\
-		      "Type aliasing is used to sanitize syscall arguments");\
-	asmlinkage long sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))	\
-		__attribute__((alias(__stringify(__se_sys##name))));	\
-	ALLOW_ERROR_INJECTION(sys##name, ERRNO);			\
-	static inline long __do_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__));\
-	asmlinkage long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__));	\
-	asmlinkage long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__))	\
-	{								\
-		long ret = __do_sys##name(__MAP(x,__SC_CAST,__VA_ARGS__));\
-		__MAP(x,__SC_TEST,__VA_ARGS__);				\
-		__PROTECT(x, ret,__MAP(x,__SC_ARGS,__VA_ARGS__));	\
-		return ret;						\
-	}								\
-	__diag_pop();							\
-	static inline long __do_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))
+#define __SYSCALL_DEFINEx(x, name, ...)                                       \
+    __diag_push();                                                        \
+    __diag_ignore(GCC, 8, "-Wattribute-alias",                            \
+                  "Type aliasing is used to sanitize syscall arguments"); \
+    asmlinkage long sys##name(__MAP(x, __SC_DECL, __VA_ARGS__))           \
+        __attribute__((alias(__stringify(__se_sys##name))));          \
+    ALLOW_ERROR_INJECTION(sys##name, ERRNO);                              \
+    static inline long __do_sys##name(__MAP(x, __SC_DECL, __VA_ARGS__));  \
+    asmlinkage long __se_sys##name(__MAP(x, __SC_LONG, __VA_ARGS__));     \
+    asmlinkage long __se_sys##name(__MAP(x, __SC_LONG, __VA_ARGS__))      \
+    {                                                                     \
+        long ret = 0;                                                 \
+        uint64_t sysnr = __syscall_meta_##name.syscall_nr;           \
+        int nb_args = __syscall_meta_##name.nb_args;                \
+        /* Define modifiable copies of all arguments */                  \
+        /* Remove const qualifier for modifiable copies */               \
+        __SC_DECL_MOD##x(__VA_ARGS__)                                    \
+        /* Initialize modifiable copies from original values */           \
+        /* Handle special cases for const parameters */                  \
+        __SC_COPY_ARGS_SAFE##x(__VA_ARGS__)                              \
+        /* Create array of pointers to modifiable arguments */           \
+        uint64_t *args_ptrs[] = { __SC_ADDR_MOD##x(__VA_ARGS__) };       \
+        long sce = igloo_hc_syscall_enter( #name, sysnr, nb_args, args_ptrs, &ret); \
+        if (sce == 0) {                                               \
+            /* Use the potentially modified copies */              \
+            ret = __do_sys##name(__SC_ARGS_MOD##x(__VA_ARGS__));    \
+        } else if (sce == 1) {                                        \
+            return ret;                                            \
+        }                                                             \
+        igloo_hc_syscall_return( #name, sysnr, nb_args, args_ptrs, &ret); \
+        __MAP(x, __SC_TEST, __VA_ARGS__);                             \
+        __PROTECT(x, ret, __MAP(x, __SC_ARGS, __VA_ARGS__));          \
+        return ret;                                                   \
+    }                                                                     \
+    __diag_pop();                                                         \
+    static inline long __do_sys##name(__MAP(x, __SC_DECL, __VA_ARGS__))
 #endif /* __SYSCALL_DEFINEx */
+
+/* Safe copy macros that handle const qualifiers properly */
+#define __SC_COPY_ARGS_SAFE1(t1, a1) \
+    memcpy(&a1##_mod, &a1, sizeof(a1##_mod));
+
+#define __SC_COPY_ARGS_SAFE2(t1, a1, t2, a2) \
+    memcpy(&a1##_mod, &a1, sizeof(a1##_mod)); \
+    memcpy(&a2##_mod, &a2, sizeof(a2##_mod));
+
+#define __SC_COPY_ARGS_SAFE3(t1, a1, t2, a2, t3, a3) \
+    memcpy(&a1##_mod, &a1, sizeof(a1##_mod)); \
+    memcpy(&a2##_mod, &a2, sizeof(a2##_mod)); \
+    memcpy(&a3##_mod, &a3, sizeof(a3##_mod));
+
+#define __SC_COPY_ARGS_SAFE4(t1, a1, t2, a2, t3, a3, t4, a4) \
+    memcpy(&a1##_mod, &a1, sizeof(a1##_mod)); \
+    memcpy(&a2##_mod, &a2, sizeof(a2##_mod)); \
+    memcpy(&a3##_mod, &a3, sizeof(a3##_mod)); \
+    memcpy(&a4##_mod, &a4, sizeof(a4##_mod));
+
+#define __SC_COPY_ARGS_SAFE5(t1, a1, t2, a2, t3, a3, t4, a4, t5, a5) \
+    memcpy(&a1##_mod, &a1, sizeof(a1##_mod)); \
+    memcpy(&a2##_mod, &a2, sizeof(a2##_mod)); \
+    memcpy(&a3##_mod, &a3, sizeof(a3##_mod)); \
+    memcpy(&a4##_mod, &a4, sizeof(a4##_mod)); \
+    memcpy(&a5##_mod, &a5, sizeof(a5##_mod));
+
+#define __SC_COPY_ARGS_SAFE6(t1, a1, t2, a2, t3, a3, t4, a4, t5, a5, t6, a6) \
+    memcpy(&a1##_mod, &a1, sizeof(a1##_mod)); \
+    memcpy(&a2##_mod, &a2, sizeof(a2##_mod)); \
+    memcpy(&a3##_mod, &a3, sizeof(a3##_mod)); \
+    memcpy(&a4##_mod, &a4, sizeof(a4##_mod)); \
+    memcpy(&a5##_mod, &a5, sizeof(a5##_mod)); \
+    memcpy(&a6##_mod, &a6, sizeof(a6##_mod));
 
 /* For split 64-bit arguments on 32-bit architectures */
 #ifdef __LITTLE_ENDIAN
