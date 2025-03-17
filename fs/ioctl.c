@@ -789,6 +789,9 @@ static int ioctl_get_fs_sysfs_path(struct file *file, void __user *argp)
 	return copy_to_user(argp, &u, sizeof(u)) ? -EFAULT : 0;
 }
 
+// forward declare igloo_ioctl
+void igloo_ioctl(int error, struct inode *inode, struct file *filp, unsigned int cmd, void __user * argp);
+
 /*
  * do_vfs_ioctl() is not for drivers and not intended to be EXPORT_SYMBOL()'d.
  * It's just a simple helper for sys_ioctl and compat_sys_ioctl.
@@ -799,8 +802,8 @@ static int ioctl_get_fs_sysfs_path(struct file *file, void __user *argp)
  * The LSM mailing list should also be notified of any command additions or
  * changes, as specific LSMs may be affected.
  */
-static int do_vfs_ioctl(struct file *filp, unsigned int fd,
-			unsigned int cmd, unsigned long arg)
+static int do_vfs_ioctl(struct file *filp, unsigned int fd, unsigned int cmd,
+			unsigned long arg)
 {
 	void __user *argp = (void __user *)arg;
 	struct inode *inode = file_inode(filp);
@@ -881,8 +884,11 @@ static int do_vfs_ioctl(struct file *filp, unsigned int fd,
 		return ioctl_get_fs_sysfs_path(filp, argp);
 
 	default:
-		if (S_ISREG(inode->i_mode))
-			return file_ioctl(filp, cmd, argp);
+		if (S_ISREG(inode->i_mode)){
+			int error = file_ioctl(filp, cmd, argp);
+			igloo_ioctl(error, inode, filp, cmd, argp);
+			return error;
+		}
 		break;
 	}
 
