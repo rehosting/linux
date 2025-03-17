@@ -26,6 +26,9 @@ static char *resolve_dfd_to_path(int dfd, char *buf, int buflen) {
 	return path;
 }
 
+/**
+ * Called from do_sys_openat2 in fs/open.c
+ */
 void igloo_hc_open(int dfd, struct filename *tmp, int fd){
     if (!igloo_do_hc) {
 	    return;

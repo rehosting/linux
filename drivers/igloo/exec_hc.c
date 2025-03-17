@@ -51,6 +51,9 @@ static const char __user *get_user_arg_ptr(struct user_arg_ptr argv, int nr)
 void igloo_exec_succeeded(struct filename *filename, 
 	struct user_arg_ptr argv, struct user_arg_ptr envp, struct linux_binprm *bprm);
 
+/**
+ * Called from do_execveat_common in fs/exec.c
+ */
 void igloo_exec_succeeded(struct filename *filename, 
 	struct user_arg_ptr argv, struct user_arg_ptr envp, struct linux_binprm *bprm) {
 	if (!igloo_do_hc){
