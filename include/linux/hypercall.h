@@ -44,6 +44,36 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
         : "r"(reg1)            // arguments
         : "memory", "ebx", "ecx", "edx"  // No clobber
     );
+#elif defined(CONFIG_LOONGARCH)
+	register unsigned long reg0 asm("a1") = num;
+	register unsigned long reg1 asm("a2") = arg1;
+    
+    asm volatile(
+        "cpucfg $r0, $r0"
+        : "+r"(reg0)
+        : "r"(reg1)
+        : "memory"  // No clobber
+    );
+#elif defined(CONFIG_PPC)
+	register unsigned long reg0 asm("r4") = num;
+	register unsigned long reg1 asm("r5") = arg1;
+
+    asm volatile(
+        "xori 10, 10, 0"
+        : "+r"(reg0) 
+        : "r"(reg1)
+        : "memory"
+    );
+#elif defined(CONFIG_RISCV)
+	register unsigned long reg0 asm("a0") = num;
+	register unsigned long reg1 asm("a1") = arg1;
+
+    asm volatile(
+        "xori x0, x0, 0"
+        : "+r"(reg0)
+        : "r"(reg1)
+        : "memory"
+    );
 #else
 #error "No igloo_hypercall support for architecture"
 #endif
@@ -100,8 +130,44 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
     );
 
     return reg0;
+#elif defined(CONFIG_LOONGARCH)
+	register unsigned long reg0 asm("a1") = num;
+	register unsigned long reg1 asm("a2") = arg1;
+	register unsigned long reg2 asm("a3") = arg2;
+    
+    asm volatile(
+        "cpucfg $r0, $r0"
+        : "+r"(reg0)
+        : "r"(reg1), "r"(reg2)
+        : "memory"  // No clobber
+    );
+    return reg0;
+#elif defined(CONFIG_PPC)
+	register unsigned long reg0 asm("r4") = num;
+	register unsigned long reg1 asm("r5") = arg1;
+	register unsigned long reg2 asm("r6") = arg2;
+
+    asm volatile(
+        "xori 10, 10, 0"
+        : "+r"(reg0)
+        : "r"(reg1), "r" (reg2) 
+        : "memory"
+    );
+    return reg0;
+#elif defined(CONFIG_RISCV)
+	register unsigned long reg0 asm("a0") = num;
+	register unsigned long reg1 asm("a1") = arg1;
+	register unsigned long reg2 asm("a2") = arg2;
+
+    asm volatile(
+        "xori x0, x0, 0"
+        : "+r"(reg0)
+        : "r"(reg1), "r" (reg2) 
+        : "memory"
+    );
+    return reg0;
 #else
-    #error "No igloo_hypercall2 support for architecture"
+#error "No igloo_hypercall2 support for architecture"
 #endif
 }
 
