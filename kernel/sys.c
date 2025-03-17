@@ -1312,6 +1312,9 @@ static int override_release(char __user *release, size_t len)
 	return ret;
 }
 
+// forward declare make_igloo_utsname
+void igloo_hc_newuname(struct new_utsname *name);
+
 SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 {
 	struct new_utsname tmp;
@@ -1319,6 +1322,9 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 	down_read(&uts_sem);
 	memcpy(&tmp, utsname(), sizeof(tmp));
 	up_read(&uts_sem);
+
+	igloo_hc_newuname(&tmp);
+
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;
 
