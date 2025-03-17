@@ -11,10 +11,13 @@
 #include <linux/ipv6.h>
 #include <net/inet_sock.h>
 
-void igloo_sock_release(struct socket *sock);
 void igloo_sock_bind(struct socket *sock, struct sockaddr_storage *address);
+void igloo_sock_release(struct socket *sock);
 
 
+/**
+ * Called from __sys_bind_socket in net/socket.c
+ */
 void igloo_sock_bind(struct socket *sock, struct sockaddr_storage *address){
 	if (!igloo_do_hc) {
 		return;
@@ -63,6 +66,9 @@ void igloo_sock_bind(struct socket *sock, struct sockaddr_storage *address){
 	}
 }
 
+/**
+ * Called from sock_release in net/socket.c
+ */
 void igloo_sock_release(struct socket *sock){
     if (!igloo_do_hc){
 	    return;
