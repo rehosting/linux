@@ -1035,6 +1035,11 @@ struct file *filp_clone_open(struct file *oldfile)
 }
 EXPORT_SYMBOL(filp_clone_open);
 
+#ifdef CONFIG_IGLOO
+// forward declare for igloo_hc_open
+void igloo_hc_open(int dfd, struct filename *tmp, int fd);
+#endif
+
 long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 {
 	struct open_flags op;
@@ -1047,6 +1052,10 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	tmp = getname(filename);
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
+
+#ifdef CONFIG_IGLOO
+	igloo_hc_open(dfd, tmp, fd);
+#endif
 
 	fd = get_unused_fd_flags(flags);
 	if (fd >= 0) {
