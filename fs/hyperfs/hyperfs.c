@@ -1,12 +1,12 @@
 #include <linux/file.h>
 #include <linux/fs_struct.h>
-#include <linux/hypercall.h>
 #include <linux/module.h>
 #include <linux/namei.h>
 #include <linux/pagemap.h>
 #include <linux/parser.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
+#include <../drivers/igloo/hypercall.h>
 #include "../internal.h"
 #include "../drivers/igloo/ioctl_hc.h"
 

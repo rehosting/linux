@@ -15,7 +15,6 @@
 #include <linux/fs.h>
 #include <linux/log2.h>
 #include <linux/mm.h>
-#include <linux/igloo.h>
 #include <linux/mman.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -50,6 +49,7 @@
 #include <linux/rseq.h>
 #include <asm/param.h>
 #include <asm/page.h>
+#include <../drivers/igloo/igloo.h>
 
 #ifndef ELF_COMPAT
 #define ELF_COMPAT 0

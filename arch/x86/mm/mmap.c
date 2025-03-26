@@ -13,7 +13,6 @@
 
 #include <linux/personality.h>
 #include <linux/mm.h>
-#include <linux/igloo.h>
 #include <linux/random.h>
 #include <linux/limits.h>
 #include <linux/sched/signal.h>
@@ -22,6 +21,7 @@
 #include <linux/elf-randomize.h>
 #include <asm/elf.h>
 #include <asm/io.h>
+#include <../drivers/igloo/igloo.h>
 
 #include "physaddr.h"
 
