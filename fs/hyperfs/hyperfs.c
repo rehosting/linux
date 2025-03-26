@@ -644,7 +644,7 @@ static long hyperfs_ioctl(struct file *file, unsigned int cmd,
 static struct dentry *hyperfs_get_real_dentry(struct dentry *dentry)
 {
 	struct path real_parent_path;
-	struct dentry *ret;
+	struct dentry *real_parent, *ret;
 	int err;
 
 	// Get real passthrough path
@@ -654,13 +654,22 @@ static struct dentry *hyperfs_get_real_dentry(struct dentry *dentry)
 		goto out;
 	}
 
-	inode_lock(real_parent_path.dentry->d_inode);
-	ret = lookup_one_len(dentry->d_name.name, real_parent_path.dentry,
+	// Get a reference to the parent dentry before releasing the path
+	real_parent = dget(real_parent_path.dentry);
+	
+	// Release the path before taking the inode lock
+	path_put(&real_parent_path);
+
+	// Now take the inode lock and perform lookup
+	inode_lock(real_parent->d_inode);
+	ret = lookup_one_len(dentry->d_name.name, real_parent,
 			     dentry->d_name.len);
-	inode_unlock(real_parent_path.dentry->d_inode);
+	inode_unlock(real_parent->d_inode);
+	
+	// Release our reference to the parent
+	dput(real_parent);
 
 out:
-	path_put(&real_parent_path);
 	return ret;
 }
 
