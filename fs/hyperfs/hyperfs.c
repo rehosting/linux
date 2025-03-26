@@ -496,19 +496,28 @@ static int hyperfs_open(struct inode *inode, struct file *file)
 	const char *real_name;
 	struct file *real_file;
 	int err = 0;
+	struct hyperfs_tree *tree = inode->i_private;
+
+	/* If this is a hyperfs-managed file/directory, no need to open a real file */
+	if (tree)
+		return 0;
+
+	/* Special case for directories - we don't need to actually open them */
+	if (S_ISDIR(inode->i_mode)) {
+		/* For directories, just succeed - the iterate function will handle actual access */
+		return 0;
+	}
 
 	real_name = hyperfs_real_path_name(file->f_path.dentry);
 	if (IS_ERR(real_name))
 		return PTR_ERR(real_name);
 
 	real_file = filp_open(real_name, file->f_flags, inode->i_mode);
-	if (IS_ERR(real_file))
+	if (IS_ERR(real_file)) {
 		err = PTR_ERR(real_file);
-
-	if (err == -ENOENT)
-		err = 0;
-	else if (!err)
+	} else {
 		file->private_data = real_file;
+	}
 
 	kfree(real_name);
 	return err;
@@ -533,7 +542,11 @@ static ssize_t hyperfs_read(struct file *file, char __user *buf, size_t size,
 	char kbuf[128];
 
 	if (tree) {
-		BUG_ON(tree->is_dir);
+		if (tree->is_dir) {
+			printk(KERN_EMERG "hyperfs: read on a directory");
+			// Directories don't support read
+			return -EISDIR;
+		}
 
 		ret = hyp_file_op((struct hyperfs_data){
 			.type = HYP_READ,
@@ -547,9 +560,11 @@ static ssize_t hyperfs_read(struct file *file, char __user *buf, size_t size,
 			if (copy_to_user(buf, kbuf, ret))
 				ret = -EFAULT;
 		}
-	} else {
-		BUG_ON(!real_file);
+	} else if (real_file) {
 		ret = vfs_read(real_file, buf, size, offset);
+	} else {
+		printk(KERN_EMERG "hyperfs: read on a file with no backing file");
+		return -EBADF;
 	}
 
 	return ret;
@@ -564,7 +579,11 @@ static ssize_t hyperfs_write(struct file *file, const char __user *buf,
 	char kbuf[128];
 
 	if (tree) {
-		BUG_ON(tree->is_dir);
+		if (tree->is_dir) {
+			printk(KERN_EMERG "hyperfs: write on a directory");
+			// Directories don't support ioctl
+			return -EISDIR;
+		}
 
 		if (copy_from_user(kbuf, buf, sizeof(kbuf)))
 			return -EFAULT;
@@ -577,9 +596,11 @@ static ssize_t hyperfs_write(struct file *file, const char __user *buf,
 		});
 		if (ret >= 0)
 			*offset += ret;
-	} else {
-		BUG_ON(!real_file);
+	} else if (real_file) {
 		ret = vfs_write(real_file, buf, size, offset);
+	} else {
+		printk(KERN_EMERG "hyperfs: write on a file with no backing file");
+		return -EBADF;
 	}
 
 	return ret;
@@ -592,16 +613,22 @@ static long hyperfs_ioctl(struct file *file, unsigned int cmd,
 	struct file *real_file = file->private_data;
 
 	if (tree) {
-		BUG_ON(tree->is_dir);
+		if (tree->is_dir) {
+			// Directories don't support ioctl
+			return -EISDIR;
+		}
 		return hyp_file_op((struct hyperfs_data){
 			.type = HYP_IOCTL,
 			.path = tree->path,
 			.ioctl.cmd = cmd,
 			.ioctl.data = (void *)arg,
 		});
-	} else {
-		BUG_ON(!real_file);
+	} else if (real_file) {
 		return vfs_ioctl(real_file, cmd, arg);
+	} else {
+		// Neither a hyperfs-managed file nor a real file
+		printk(KERN_EMERG "hyperfs: ioctl on a file with no backing file");
+		return -EBADF;
 	}
 }
 
@@ -622,12 +649,9 @@ static struct dentry *hyperfs_get_real_dentry(struct dentry *dentry)
 	ret = lookup_one_len(dentry->d_name.name, real_parent_path.dentry,
 			     dentry->d_name.len);
 	inode_unlock(real_parent_path.dentry->d_inode);
-	if (IS_ERR(ret))
-		goto out_path;
 
-out_path:
-	path_put(&real_parent_path);
 out:
+	path_put(&real_parent_path);
 	return ret;
 }
 
@@ -833,20 +857,28 @@ static int hyperfs_getattr(struct mnt_idmap *idmap, const struct path *path,
 {
 	struct path real_path;
 	int err;
+	struct inode *inode = path->dentry->d_inode;
+	struct hyperfs_tree *tree = inode ? inode->i_private : NULL;
 
+	/* First check if this is a hyperfs-managed directory or file */
+	if (tree) {
+		/* For hyperfs-managed entities, provide basic stats */
+		generic_fillattr(idmap, request_mask, inode, stat);
+		return 0;
+	}
+
+	/* Try to get real path - may fail if directory doesn't exist in passthrough */
 	err = hyperfs_real_path(path->dentry, &real_path);
-	if (err < 0)
+	if (err == -ENOENT && S_ISDIR(inode->i_mode)) {
+		/* For directories that don't exist in passthrough, provide generic attributes */
+		generic_fillattr(idmap, request_mask, inode, stat);
+		return 0;
+	} else if (err < 0) {
 		return err;
+	}
 
-	/* 
-	 * In Linux 6.7, vfs_getattr takes 4 parameters:
-	 * - path: the path to get attributes from
-	 * - stat: where to store the attributes
-	 * - request_mask: what attributes to retrieve
-	 * - query_flags: special options for the query
-	 */
+	/* Get attributes from real path */
 	err = vfs_getattr(&real_path, stat, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
-
 	path_put(&real_path);
 	return err;
 }
@@ -912,7 +944,7 @@ static int hyperfs_iterate(struct file *file, struct dir_context *ctx)
 	err = hyperfs_real_path(file->f_path.dentry, &real_path);
 	if (err == -ENOENT) {
 		err = 0;
-		goto out;
+		goto out;  // Just show virtual entries for non-existent real directories
 	}
 	if (err < 0)
 		return err;
@@ -922,8 +954,8 @@ static int hyperfs_iterate(struct file *file, struct dir_context *ctx)
 		dentry_open(&real_path, O_RDONLY | O_DIRECTORY, current_cred());
 	if (IS_ERR(real_file)) {
 		err = PTR_ERR(real_file);
-		if (err == -ENOENT)
-			err = 0;
+		if (err == -ENOENT || err == -ENOTDIR || err == -EACCES)
+			err = 0;  /* Accept more error types as "directory is empty" */
 		goto out_real_path;
 	}
 
@@ -978,9 +1010,9 @@ static int hyperfs_writepage(struct page *page, struct writeback_control *wbc)
 	hyp_file_op((struct hyperfs_data){
 		.type = HYP_WRITE,
 		.path = tree->path,
-		.read.buf = data,
-		.read.size = PAGE_SIZE,
-		.read.offset = page_offset(page),
+		.write.buf = data,
+		.write.size = PAGE_SIZE,
+		.write.offset = page_offset(page),
 	});
 
 	kunmap(page);
@@ -1022,6 +1054,7 @@ static int hyperfs_readlink(struct dentry *dentry, char __user *buffer,
 }
 
 static const struct file_operations hyperfs_file_operations = {
+	.owner = THIS_MODULE,
 	.open = hyperfs_open,
 	.release = hyperfs_release,
 	.read = hyperfs_read,
@@ -1046,6 +1079,8 @@ static const struct inode_operations hyperfs_inode_operations = {
 };
 
 static const struct file_operations hyperfs_dir_operations = {
+	.owner = THIS_MODULE,
+	.llseek = generic_file_llseek,
 	.read = generic_read_dir,
 	.open = generic_file_open,
 	.iterate_shared = hyperfs_iterate,  // Changed from .iterate to .iterate_shared
