@@ -8,6 +8,7 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include "../internal.h"
+#include "../drivers/igloo/ioctl_hc.h"
 
 #define MAGIC_VALUE 0x51ec3692 // crc32("hyperfs")
 #define HYPERFS_DEBUG 0
