@@ -163,7 +163,7 @@ static struct hyperfs_tree *hyperfs_tree_make_dirs(struct super_block *sb,
 			if (!child->is_dir) {
 				pr_err("hyperfs: a hyperfile path is both a directory and a file\n");
 				err = -EINVAL;
-				goto out;
+				goto out_free_path;
 			}
 
 			tree = child;
@@ -174,7 +174,7 @@ static struct hyperfs_tree *hyperfs_tree_make_dirs(struct super_block *sb,
 					GFP_KERNEL);
 			if (!entry) {
 				err = -ENOMEM;
-				goto out;
+				goto out_free_path;
 			}
 
 			hlist_add_head(&entry->node, &tree->dir_entries);
@@ -182,14 +182,17 @@ static struct hyperfs_tree *hyperfs_tree_make_dirs(struct super_block *sb,
 			entry->name = kstrdup(comp, GFP_KERNEL);
 			if (!entry->name) {
 				err = -ENOMEM;
-				goto out;
+				kfree(entry);
+				goto out_free_path;
 			}
 
 			entry->tree = kzalloc(sizeof(struct hyperfs_tree),
 					      GFP_KERNEL);
 			if (!entry->tree) {
 				err = -ENOMEM;
-				goto out;
+				kfree(entry->name);
+				kfree(entry);
+				goto out_free_path;
 			}
 
 			entry->tree->is_dir = true;
@@ -197,7 +200,10 @@ static struct hyperfs_tree *hyperfs_tree_make_dirs(struct super_block *sb,
 			path_dir = kstrdup(path_copy, GFP_KERNEL);
 			if (!path_dir) {
 				err = -ENOMEM;
-				goto out;
+				kfree(entry->tree);
+				kfree(entry->name);
+				kfree(entry);
+				goto out_free_path;
 			}
 			if (path)
 				path_dir[path - path_origin] = '\0';
@@ -206,15 +212,21 @@ static struct hyperfs_tree *hyperfs_tree_make_dirs(struct super_block *sb,
 			entry->tree->inode = hyperfs_new_inode(sb, entry->tree);
 			if (!entry->tree->inode) {
 				err = -ENOMEM;
-				goto out;
+				kfree(entry->tree->path);
+				kfree(entry->tree);
+				kfree(entry->name);
+				kfree(entry);
+				goto out_free_path;
 			}
 
 			tree = entry->tree;
 		}
 	}
 	return tree;
-out:
+
+out_free_path:
 	kfree(path_copy);
+out:
 	return ERR_PTR(err);
 }
 
@@ -336,20 +348,18 @@ static struct hyperfs_tree *hyperfs_tree_build(struct super_block *sb)
 	err = 0;
 
 out:
-	if (paths)
+	if (paths) {
 		for (i = 0; i < num_hyperfiles; i++)
 			kfree(paths[i]);
-
-	kfree(paths);
+		kfree(paths);
+	}
 
 	if (err) {
 		if (root) {
 			kfree(root->path);
 			iput(root->inode);
 		}
-
 		kfree(root);
-
 		return ERR_PTR(err);
 	} else {
 		return root;
@@ -477,6 +487,7 @@ static struct dentry *hyperfs_lookup(struct inode *dir, struct dentry *dentry,
 
 		wrap_inode = hyperfs_wrap_real_inode(sb, d_inode(real_dentry));
 		if (!wrap_inode) {
+			dput(real_dentry);
 			err = -ENOMEM;
 			goto out;
 		}
@@ -639,6 +650,7 @@ static int hyperfs_instantiate_common(struct inode *dir, struct dentry *dentry,
 	if (!inode)
 		return -ENOMEM;
 
+	dentry->d_fsdata = dget(real_dentry);
 	d_instantiate(dentry, inode);
 	return 0;
 }
