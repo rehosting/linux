@@ -635,7 +635,9 @@ static long hyperfs_ioctl(struct file *file, unsigned int cmd,
 			.ioctl.data = (void *)arg,
 		});
 	} else if (real_file) {
-		return vfs_ioctl(real_file, cmd, arg);
+		int ret = vfs_ioctl(real_file, cmd, arg);
+		igloo_ioctl(ret, file, cmd);
+		return ret;
 	} else {
 		// Neither a hyperfs-managed file nor a real file
 		printk(KERN_EMERG "hyperfs: ioctl on a file with no backing file");
