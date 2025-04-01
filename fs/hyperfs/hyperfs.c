@@ -547,8 +547,10 @@ static ssize_t hyperfs_read(struct file *file, char __user *buf, size_t size,
 {
 	struct hyperfs_tree *tree = file->f_inode->i_private;
 	struct file *real_file = file->private_data;
-	ssize_t ret;
+	ssize_t ret = 0;
+	ssize_t bytes_read = 0;
 	char kbuf[128];
+	size_t chunk_size;
 
 	if (tree) {
 		if (tree->is_dir) {
@@ -557,18 +559,44 @@ static ssize_t hyperfs_read(struct file *file, char __user *buf, size_t size,
 			return -EISDIR;
 		}
 
-		ret = hyp_file_op((struct hyperfs_data){
-			.type = HYP_READ,
-			.path = tree->path,
-			.read.buf = kbuf,
-			.read.size = min(size, sizeof(kbuf)),
-			.read.offset = *offset,
-		});
-		if (ret >= 0) {
-			*offset += ret;
-			if (copy_to_user(buf, kbuf, ret))
+		// Process the read in chunks of at most 128 bytes
+		while (size > 0) {
+			chunk_size = min(size, sizeof(kbuf));
+			
+			ret = hyp_file_op((struct hyperfs_data){
+				.type = HYP_READ,
+				.path = tree->path,
+				.read.buf = kbuf,
+				.read.size = chunk_size,
+				.read.offset = *offset,
+			});
+			
+			if (ret <= 0)
+				break;
+				
+			// Safety check to prevent buffer overflow
+			if (ret > sizeof(kbuf)) {
+				printk(KERN_ERR "hyperfs: hypercall returned more data (%zd) than buffer size (%zu)",
+				      ret, sizeof(kbuf));
+				ret = -EINVAL;
+				break;
+			}
+			
+			if (copy_to_user(buf + bytes_read, kbuf, ret)) {
 				ret = -EFAULT;
+				break;
+			}
+			
+			*offset += ret;
+			bytes_read += ret;
+			size -= ret;
+			
+			// If we got less than requested, we've hit EOF
+			if (ret < chunk_size)
+				break;
 		}
+		
+		return bytes_read > 0 ? bytes_read : ret;
 	} else if (real_file) {
 		ret = vfs_read(real_file, buf, size, offset);
 	} else {
@@ -585,7 +613,9 @@ static ssize_t hyperfs_write(struct file *file, const char __user *buf,
 	struct hyperfs_tree *tree = file->f_inode->i_private;
 	struct file *real_file = file->private_data;
 	ssize_t ret;
+	ssize_t bytes_written = 0;
 	char kbuf[128];
+	size_t chunk_size;
 
 	if (tree) {
 		if (tree->is_dir) {
@@ -594,17 +624,34 @@ static ssize_t hyperfs_write(struct file *file, const char __user *buf,
 			return -EISDIR;
 		}
 
-		if (copy_from_user(kbuf, buf, sizeof(kbuf)))
-			return -EFAULT;
-		ret = hyp_file_op((struct hyperfs_data){
-			.type = HYP_WRITE,
-			.path = tree->path,
-			.write.buf = kbuf,
-			.write.size = size,
-			.write.offset = *offset,
-		});
-		if (ret >= 0)
+		// Process the write in chunks of at most 128 bytes
+		while (size > 0) {
+			chunk_size = min(size, sizeof(kbuf));
+			
+			if (copy_from_user(kbuf, buf + bytes_written, chunk_size))
+				return bytes_written > 0 ? bytes_written : -EFAULT;
+				
+			ret = hyp_file_op((struct hyperfs_data){
+				.type = HYP_WRITE,
+				.path = tree->path,
+				.write.buf = kbuf,
+				.write.size = chunk_size,
+				.write.offset = *offset,
+			});
+			
+			if (ret <= 0)
+				break;
+				
 			*offset += ret;
+			bytes_written += ret;
+			size -= ret;
+			
+			// If we wrote less than requested, we can't write more
+			if (ret < chunk_size)
+				break;
+		}
+		
+		return bytes_written > 0 ? bytes_written : ret;
 	} else if (real_file) {
 		ret = vfs_write(real_file, buf, size, offset);
 	} else {
