@@ -597,7 +597,7 @@ static ssize_t hyperfs_read(struct file *file, char __user *buf, size_t size,
 			chunk_size = min(size, sizeof(kbuf));
 			
 			ret = hyp_file_op((struct hyperfs_data){
-				.type = HYP_READ,
+				.type = HYP_FILE_OP_READ,
 				.path = tree->path,
 				.read.buf = kbuf,
 				.read.size = chunk_size,
@@ -665,7 +665,7 @@ static ssize_t hyperfs_write(struct file *file, const char __user *buf,
 				return -EFAULT;
 				
 			ret = hyp_file_op((struct hyperfs_data){
-				.type = HYP_WRITE,
+				.type = HYP_FILE_OP_WRITE,
 				.path = tree->path,
 				.write.buf = kbuf,
 				.write.size = chunk_size,
