@@ -583,7 +583,7 @@ static ssize_t hyperfs_read(struct file *file, char __user *buf, size_t size,
 			}
 			
 			if (copy_to_user(buf + bytes_read, kbuf, ret)) {
-				ret = -EFAULT;
+				ret = bytes_read > 0 ? bytes_read : -EFAULT;
 				break;
 			}
 			
