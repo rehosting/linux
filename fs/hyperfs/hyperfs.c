@@ -583,7 +583,7 @@ static ssize_t hyperfs_read(struct file *file, char __user *buf, size_t size,
 			}
 			
 			if (copy_to_user(buf + bytes_read, kbuf, ret)) {
-				ret = bytes_read > 0 ? bytes_read : -EFAULT;
+				ret = -EFAULT;
 				break;
 			}
 			
@@ -629,7 +629,7 @@ static ssize_t hyperfs_write(struct file *file, const char __user *buf,
 			chunk_size = min(size, sizeof(kbuf));
 			
 			if (copy_from_user(kbuf, buf + bytes_written, chunk_size))
-				return bytes_written > 0 ? bytes_written : -EFAULT;
+				return -EFAULT;
 				
 			ret = hyp_file_op((struct hyperfs_data){
 				.type = HYP_WRITE,
