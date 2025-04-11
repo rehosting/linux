@@ -1117,7 +1117,6 @@ static const struct inode_operations hyperfs_inode_operations = {
 
 static const struct file_operations hyperfs_dir_operations = {
 	.owner = THIS_MODULE,
-	.llseek = generic_file_llseek,
 	.read = generic_read_dir,
 	.open = generic_file_open,
 	.iterate = hyperfs_iterate,
