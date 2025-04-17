@@ -29,6 +29,11 @@ struct hyperfs {
 	struct hyperfs_tree *tree;
 };
 
+struct hyperfs_dentry_fsdata {
+	u64 cached_inode_version;
+	struct dentry *real;
+};
+
 // Must be castable from real_ctx for hyperfs_real_iter_actor
 struct hyperfs_iterate_data {
 	struct dir_context real_ctx;
@@ -461,6 +466,7 @@ static struct dentry *hyperfs_lookup(struct inode *dir, struct dentry *dentry,
 	struct path real_path;
 	struct dentry *real_dentry;
 	struct inode *wrap_inode;
+	struct hyperfs_dentry_fsdata *d_fsdata;
 	int err = 0;
 
 	tree = dir->i_private;
@@ -492,7 +498,18 @@ static struct dentry *hyperfs_lookup(struct inode *dir, struct dentry *dentry,
 			goto out;
 		}
 
-		dentry->d_fsdata = real_dentry;
+		d_fsdata = kmalloc(sizeof(*d_fsdata), GFP_KERNEL);
+		if (!d_fsdata) {
+			dput(real_dentry);
+			iput(wrap_inode);
+			err = -ENOMEM;
+			goto out;
+		}
+		d_fsdata->cached_inode_version = d_inode(real_dentry)->i_version;
+		d_fsdata->real = real_dentry;
+
+		dentry->d_fsdata = d_fsdata;
+
 		d_add(dentry, wrap_inode);
 	}
 
@@ -725,12 +742,23 @@ static int hyperfs_instantiate_common(struct inode *dir, struct dentry *dentry,
 {
 	struct super_block *sb = dir->i_sb;
 	struct inode *inode;
+	struct hyperfs_dentry_fsdata *d_fsdata;
 
 	inode = hyperfs_wrap_real_inode(sb, real_dentry->d_inode);
 	if (!inode)
 		return -ENOMEM;
 
-	dentry->d_fsdata = dget(real_dentry);
+	d_fsdata = kmalloc(sizeof(*d_fsdata), GFP_KERNEL);
+	if (!d_fsdata) {
+		iput(inode);
+		return -ENOMEM;
+	}
+
+	d_fsdata->real = dget(real_dentry);
+	d_fsdata->cached_inode_version = d_fsdata->real->d_inode->i_version;
+
+	dentry->d_fsdata = d_fsdata;
+
 	d_instantiate(dentry, inode);
 	return 0;
 }
@@ -1063,31 +1091,31 @@ static int hyperfs_writepage(struct page *page, struct writeback_control *wbc)
 static const char *hyperfs_get_link(struct dentry *dentry, struct inode *inode,
 				    struct delayed_call *done)
 {
-	struct dentry *real;
+	struct hyperfs_dentry_fsdata *d_fsdata;
 
 	if (!dentry)
 		return ERR_PTR(-ECHILD);
 
-	real = dentry->d_fsdata;
+	d_fsdata = dentry->d_fsdata;
 
-	if (!real)
+	if (!d_fsdata || !d_fsdata->real)
 		return ERR_PTR(-EINVAL);
 
-	return vfs_get_link(real, done);
+	return vfs_get_link(d_fsdata->real, done);
 }
 
 static int hyperfs_readlink(struct dentry *dentry, char __user *buffer,
 			    int buflen)
 {
-	struct dentry *real = dentry->d_fsdata;
+	struct hyperfs_dentry_fsdata *d_fsdata = dentry->d_fsdata;
 
 	if (!dentry)
 		return -ECHILD;
 
-	if (!real)
+	if (!d_fsdata || !d_fsdata->real)
 		return -EINVAL;
 
-	return vfs_readlink(real, buffer, buflen);
+	return vfs_readlink(d_fsdata->real, buffer, buflen);
 }
 
 static const struct file_operations hyperfs_file_operations = {
@@ -1233,14 +1261,18 @@ static const struct super_operations hyperfs_super_operations = {
 
 static void hyperfs_d_release(struct dentry *dentry)
 {
-	struct dentry *real = dentry->d_fsdata;
+	struct hyperfs_dentry_fsdata *d_fsdata = dentry->d_fsdata;
 
-	dput(real);
+	if (d_fsdata) {
+		dput(d_fsdata->real);
+		kfree(d_fsdata);
+	}
 }
 
 static int hyperfs_d_revalidate(struct dentry *dentry, unsigned int flags)
 {
-	struct dentry *real = dentry->d_fsdata;
+	struct hyperfs_dentry_fsdata *d_fsdata = dentry->d_fsdata;
+	struct dentry *real = d_fsdata ? d_fsdata->real : NULL;
 	int ret = 1;
 
 	if (!real)
@@ -1257,16 +1289,23 @@ static int hyperfs_d_revalidate(struct dentry *dentry, unsigned int flags)
 		}
 	}
 
+	if (d_fsdata->cached_inode_version != real->d_inode->i_version)
+		return 0;
+
 	return 1;
 }
 
 static int hyperfs_d_weak_revalidate(struct dentry *dentry, unsigned int flags)
 {
-	struct dentry *real = dentry->d_fsdata;
+	struct hyperfs_dentry_fsdata *d_fsdata = dentry->d_fsdata;
+	struct dentry *real = d_fsdata ? d_fsdata->real : NULL;
 	int ret = 1;
 
 	if (real && (real->d_flags & DCACHE_OP_WEAK_REVALIDATE))
 		ret = real->d_op->d_weak_revalidate(real, flags);
+
+	if (real && d_fsdata->cached_inode_version != real->d_inode->i_version)
+		ret = 0;
 
 	return ret;
 }
