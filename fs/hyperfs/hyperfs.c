@@ -51,35 +51,56 @@ static const match_table_t hyperfs_tokens = {
 	{ HYPERFS_OPT_ERR, NULL },
 };
 
-enum { HYP_FILE_OP, HYP_GET_NUM_HYPERFILES, HYP_GET_HYPERFILE_PATHS };
+enum { HYP_FILE_OP, HYP_GET_NUM_HYPERFILES, HYP_GET_HYPERFILE_PATHS, HYP_IOCTL_OP, HYP_IOCTL_END, HYP_IOCTL_READ_RESPONSE };
 
-enum { HYP_READ, HYP_WRITE, HYP_IOCTL, HYP_GETATTR };
+enum { HYP_FILE_OP_READ, HYP_FILE_OP_WRITE, HYP_FILE_OP_IOCTL, HYP_FILE_OP_GETATTR };
+
+enum { HYP_IOCTL_OP_READ, HYP_IOCTL_OP_WRITE, HYP_IOCTL_OP_RETURN };
 
 enum { DEV_MODE = S_IFREG | 0666, DIR_MODE = S_IFDIR | 0777 };
 
-enum { HYPERFILE_PATH_MAX = 1024 };
+enum { HYPERFILE_PATH_MAX = 1024, IOCTL_WRITE_SIZE = 128 };
 
 struct hyperfs_data {
-	int type;
-	const char *path;
+	int type; // output
+	const char *path; // output
 	union {
 		struct {
-			char *buf;
-			size_t size;
-			loff_t offset;
+			char *buf; // input
+			size_t size; // output
+			loff_t offset; // output
 		} __packed read;
 		struct {
-			const char *buf;
-			size_t size;
-			loff_t offset;
+			const char *buf; // output
+			size_t size; // output
+			loff_t offset; // output
 		} __packed write;
 		struct {
-			unsigned int cmd;
-			void *data;
+			unsigned int cmd; // output
+			void *data; // output
 		} __packed ioctl;
 		struct {
-			loff_t *size;
+			loff_t *size; // input
 		} __packed getattr;
+	} __packed;
+} __packed;
+
+// All fields are inputs
+struct hyperfs_ioctl_request {
+	int op;
+	union {
+		struct {
+			size_t len;
+			void __user *ptr;
+		} __packed read;
+		struct {
+			size_t len;
+			void __user *ptr;
+			u8 data[IOCTL_WRITE_SIZE];
+		} __packed write;
+		struct {
+			long status;
+		} __packed ret;
 	} __packed;
 } __packed;
 
@@ -371,26 +392,38 @@ out:
 	}
 }
 
-static void page_in_hyperfs_data(struct hyperfs_data *data)
+static void page_in_buffer(const void *buf, size_t len)
 {
-	volatile unsigned char x = 0;
+	volatile u8 x = 0;
+	const u8 *p = buf;
 	size_t i;
 
-	for (i = 0; i < sizeof(*data); i++)
-		x += ((unsigned char *)data)[i];
-	for (i = 0; data->path[i]; i++)
-		x += data->path[i];
+	for (i = 0; i < len; i++)
+		x += p[i];
+}
+
+static void page_in_str(const char *str)
+{
+	volatile u8 x = 0;
+	size_t i;
+
+	for (i = 0; str[i]; i++)
+		x += str[i];
+}
+
+static void page_in_hyperfs_data(struct hyperfs_data *data)
+{
+	page_in_buffer(data, sizeof(*data));
+	page_in_str(data->path);
 	switch (data->type) {
-	case HYP_READ:
-		for (i = 0; i < data->read.size; i++)
-			x += data->read.buf[i];
+	case HYP_FILE_OP_READ:
+		page_in_buffer(data->read.buf, data->read.size);
 		break;
-	case HYP_WRITE:
-		for (i = 0; i < data->write.size; i++)
-			x += data->write.buf[i];
-	case HYP_GETATTR:
-		for (i = 0; i < sizeof(*data->getattr.size); i++)
-			x += ((unsigned char *)data->getattr.size)[i];
+	case HYP_FILE_OP_WRITE:
+		page_in_buffer(data->write.buf, data->write.size);
+		break;
+	case HYP_FILE_OP_GETATTR:
+		page_in_buffer(data->getattr.size, sizeof(*data->getattr.size));
 		break;
 	}
 }
@@ -581,7 +614,7 @@ static ssize_t hyperfs_read(struct file *file, char __user *buf, size_t size,
 			chunk_size = min(size, sizeof(kbuf));
 			
 			ret = hyp_file_op((struct hyperfs_data){
-				.type = HYP_READ,
+				.type = HYP_FILE_OP_READ,
 				.path = tree->path,
 				.read.buf = kbuf,
 				.read.size = chunk_size,
@@ -649,7 +682,7 @@ static ssize_t hyperfs_write(struct file *file, const char __user *buf,
 				return -EFAULT;
 				
 			ret = hyp_file_op((struct hyperfs_data){
-				.type = HYP_WRITE,
+				.type = HYP_FILE_OP_WRITE,
 				.path = tree->path,
 				.write.buf = kbuf,
 				.write.size = chunk_size,
@@ -679,6 +712,73 @@ static ssize_t hyperfs_write(struct file *file, const char __user *buf,
 	return ret;
 }
 
+static long hyperfs_ioctl_fake(struct hyperfs_tree *tree, unsigned int cmd, unsigned long arg)
+{
+	static DEFINE_MUTEX(mutex);
+	struct hyperfs_ioctl_request req;
+	u8 kbuf[128];
+	long ret;
+
+	if (tree->is_dir) {
+		// Directories don't support ioctl
+		return -EISDIR;
+	}
+
+	// Ensure only one set of hypercalls is running at a time, so the hypercalls
+	// don't get interleaved and mess up the emulator's state machine
+	mutex_lock(&mutex);
+
+	// Notify emulator that a fake ioctl was called
+	hyp_file_op((struct hyperfs_data){
+		.type = HYP_FILE_OP_IOCTL,
+		.path = tree->path,
+		.ioctl.cmd = cmd,
+		.ioctl.data = (void *)arg,
+	});
+
+
+	// Do all ioctl reads and writes the emulator wants
+	for (;;) {
+		// Ask emulator for ioctl operation
+		page_in_buffer(&req, sizeof(req));
+		igloo_hypercall2(MAGIC_VALUE, HYP_IOCTL_OP, (unsigned long)&req);
+
+		// Handle ioctl operation
+		switch (req.op) {
+			case HYP_IOCTL_OP_READ:
+				// Perform userspace memory read for emulator
+				BUG_ON(req.read.len > sizeof(kbuf));
+				if (copy_from_user(kbuf, req.read.ptr, req.read.len)) {
+					ret = -EFAULT;
+					goto out;
+				}
+
+				// Give emulator the data
+				page_in_buffer(kbuf, sizeof(kbuf));
+				igloo_hypercall2(MAGIC_VALUE, HYP_IOCTL_READ_RESPONSE, (long)kbuf);
+				break;
+			case HYP_IOCTL_OP_WRITE:
+				// Perform userspace write for emulator
+				if (copy_to_user(req.write.ptr, req.write.data, req.write.len)) {
+					ret = -EFAULT;
+					goto out;
+				}
+				break;
+			case HYP_IOCTL_OP_RETURN:
+				// Return emulator's status to caller
+				ret = req.ret.status;
+				goto out;
+		}
+	}
+
+out:
+	// Tell emulator to end its state machine
+	igloo_hypercall(MAGIC_VALUE, HYP_IOCTL_END);
+
+	mutex_unlock(&mutex);
+	return ret;
+}
+
 static long hyperfs_ioctl(struct file *file, unsigned int cmd,
 			  unsigned long arg)
 {
@@ -686,16 +786,7 @@ static long hyperfs_ioctl(struct file *file, unsigned int cmd,
 	struct file *real_file = file->private_data;
 
 	if (tree) {
-		if (tree->is_dir) {
-			// Directories don't support ioctl
-			return -EISDIR;
-		}
-		return hyp_file_op((struct hyperfs_data){
-			.type = HYP_IOCTL,
-			.path = tree->path,
-			.ioctl.cmd = cmd,
-			.ioctl.data = (void *)arg,
-		});
+		return hyperfs_ioctl_fake(tree, cmd, arg);
 	} else if (real_file) {
 		return vfs_ioctl(real_file, cmd, arg);
 	} else {
@@ -1050,7 +1141,7 @@ static int hyperfs_readpage(struct file *file, struct page *page)
 	data = kmap(page);
 
 	hyp_file_op((struct hyperfs_data){
-		.type = HYP_READ,
+		.type = HYP_FILE_OP_READ,
 		.path = tree->path,
 		.read.buf = data,
 		.read.size = PAGE_SIZE,
@@ -1073,7 +1164,7 @@ static int hyperfs_writepage(struct page *page, struct writeback_control *wbc)
 	data = kmap(page);
 
 	hyp_file_op((struct hyperfs_data){
-		.type = HYP_WRITE,
+		.type = HYP_FILE_OP_WRITE,
 		.path = tree->path,
 		.write.buf = data,
 		.write.size = PAGE_SIZE,
@@ -1175,7 +1266,7 @@ static void hyperfs_fill_inode(struct inode *inode, struct hyperfs_tree *tree)
 		inode->i_data.a_ops = &hyperfs_aops;
 
 		hyp_file_op((struct hyperfs_data){
-			.type = HYP_GETATTR,
+			.type = HYP_FILE_OP_GETATTR,
 			.path = tree->path,
 			.getattr.size = &inode->i_size,
 		});
