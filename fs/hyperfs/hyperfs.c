@@ -478,8 +478,20 @@ static struct dentry *hyperfs_lookup(struct inode *dir, struct dentry *dentry,
 	} else {
 		err = hyperfs_real_path(dentry, &real_path);
 		if (err == -ENOENT) {
-			igloo_enoent(dentry);
-			err = 0;
+			/* Report the full path of the missing entry (not just parent) */
+			char *path_buf = kmalloc(PATH_MAX, GFP_KERNEL);
+			if (path_buf) {
+				char *full_path = dentry_path_raw(dentry, path_buf, PATH_MAX);
+				if (!IS_ERR(full_path)) {
+					igloo_enoent_path(full_path);
+				} else {
+					igloo_enoent(dentry); /* Fallback */
+				}
+				kfree(path_buf);
+			} else {
+				igloo_enoent(dentry); /* Fallback */
+			}
+			err = 0; // Clear error after reporting
 			d_add(dentry, NULL);
 			goto out;
 		}
@@ -956,17 +968,34 @@ static int hyperfs_getattr(struct mnt_idmap *idmap, const struct path *path,
 
 	/* Try to get real path - may fail if directory doesn't exist in passthrough */
 	err = hyperfs_real_path(path->dentry, &real_path);
-	if (err == -ENOENT && S_ISDIR(inode->i_mode)) {
-		/* For directories that don't exist in passthrough, provide generic attributes */
-		generic_fillattr(idmap, request_mask, inode, stat);
-		return 0;
-	} else if (err < 0) {
+	if (err < 0){
 		if (err == -ENOENT) {
-			igloo_enoent(path->dentry);
+			/* Report the full path of the missing entry */
+			char *path_buf = kmalloc(PATH_MAX, GFP_KERNEL);
+			if (path_buf) {
+				char *full_path = dentry_path_raw(path->dentry, path_buf, PATH_MAX);
+				if (!IS_ERR(full_path)) {
+					igloo_enoent_path(full_path);
+				} else {
+					igloo_enoent(path->dentry); /* Fallback */
+				}
+				kfree(path_buf);
+			} else {
+				igloo_enoent(path->dentry); /* Fallback */
+			}
+
+			if (inode && S_ISDIR(inode->i_mode)){
+				/* For directories that don't exist in passthrough, provide generic attributes */
+				generic_fillattr(idmap, request_mask, inode, stat);
+				return 0;
+			} else {
+				/* For files that don't exist in passthrough, return error */
+				return -ENOENT;
+			}
 		}
 		return err;
 	}
-
+	
 	/* Get attributes from real path */
 	err = vfs_getattr(&real_path, stat, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
 	path_put(&real_path);
@@ -1033,6 +1062,7 @@ static int hyperfs_iterate(struct file *file, struct dir_context *ctx)
 	// Get real passthrough path
 	err = hyperfs_real_path(file->f_path.dentry, &real_path);
 	if (err == -ENOENT) {
+		igloo_enoent(file->f_path.dentry);
 		err = 0;
 		goto out;  // Just show virtual entries for non-existent real directories
 	}
@@ -1044,8 +1074,10 @@ static int hyperfs_iterate(struct file *file, struct dir_context *ctx)
 		dentry_open(&real_path, O_RDONLY | O_DIRECTORY, current_cred());
 	if (IS_ERR(real_file)) {
 		err = PTR_ERR(real_file);
-		if (err == -ENOENT || err == -ENOTDIR || err == -EACCES)
+		if (err == -ENOENT || err == -ENOTDIR || err == -EACCES){
+			igloo_enoent(file->f_path.dentry);
 			err = 0;  /* Accept more error types as "directory is empty" */
+		}
 		goto out_real_path;
 	}
 
