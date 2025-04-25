@@ -1019,10 +1019,14 @@ out_free_interp:
 	/* Do this so that we can load the interpreter, if need be.  We will
 	   change some of these later */
     //Begin for igloo: if we moved the stack, we have to move mmap
+	#ifdef CONFIG_IGLOO
     if(igloo_task_size) {
         retval = setup_arg_pages(bprm, randomize_stack_top(igloo_task_size),
                      executable_stack);
-    } else {
+    } else 
+	#endif
+	
+	{
         retval = setup_arg_pages(bprm, randomize_stack_top(STACK_TOP),
                      executable_stack);
     }

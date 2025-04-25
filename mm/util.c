@@ -438,10 +438,13 @@ static unsigned long mmap_base(unsigned long rnd, struct rlimit *rlim_stack)
 	 * task. mmap_base starts directly below the stack and grows
 	 * downwards.
 	 */
+	#ifdef CONFIG_IGLOO
 	//Begin for igloo: if we moved the stack, we have to move mmap
 	if(igloo_task_size) {
 		return PAGE_ALIGN_DOWN(igloo_task_size - rnd);
-	} else {
+	} else 
+	#endif	
+	{
 		return PAGE_ALIGN_DOWN(mmap_upper_limit(rlim_stack) - rnd);
 	}
 	//End for igloo
@@ -463,9 +466,12 @@ static unsigned long mmap_base(unsigned long rnd, struct rlimit *rlim_stack)
 		gap = MAX_GAP;
 
 	//Begin for igloo: if we moved the stack, we have to move mmap
+	#ifdef CONFIG_IGLOO
 	if(igloo_task_size) {
 		return PAGE_ALIGN(igloo_task_size - gap - rnd);
-	} else {
+	} else 
+	#endif
+	{
 		return PAGE_ALIGN(STACK_TOP - gap - rnd);
 	}
 	//End for igloo

@@ -104,9 +104,12 @@ static unsigned long mmap_base(unsigned long rnd, unsigned long task_size,
 		gap = gap_max;
 
 	//Begin for igloo: if we moved the stack, we have to move mmap
+	#ifdef CONFIG_IGLOO
 	if(igloo_task_size) {
 		return PAGE_ALIGN(igloo_task_size - gap - rnd);
-	} else {
+	} else 
+	#endif
+	{
 		return PAGE_ALIGN(TASK_SIZE - gap - rnd);
 	}
 	//End for igloo
