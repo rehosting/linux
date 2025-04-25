@@ -1,1 +1,1 @@
-obj-y := hyperfs.o
+obj-(CONFIG_HYPERFS_FS) := hyperfs.o
