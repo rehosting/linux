@@ -214,6 +214,7 @@ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
 #endif
 
 #ifdef CONFIG_IGLOO
+#include <../drivers/igloo/syscalls_hc.h>
 /* === Igloo Interception Hooks and Helpers === */
 
 /* Pointers to the actual hook functions */
