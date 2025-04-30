@@ -19,12 +19,11 @@
 #include <linux/printk.h> // Add printk include
 
 // Add conditional debug macro
-#define CONFIG_IGLOO_DEBUG 1
-// #ifdef CONFIG_IGLOO_DEBUG
+#ifdef CONFIG_IGLOO_DEBUG
 #define igloo_pr_debug(fmt, ...) printk( KERN_EMERG fmt, ##__VA_ARGS__)
-// #else
-// #define igloo_pr_debug(fmt, ...) do {} while (0)
-// #endif
+#else
+#define igloo_pr_debug(fmt, ...) do {} while (0)
+#endif
 
 #define CHUNK_SIZE 128
 
