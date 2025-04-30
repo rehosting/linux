@@ -225,10 +225,6 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 /* Define stubs or original macros if Igloo is disabled */
 #define igloo_syscall_enter_hook NULL
 #define igloo_syscall_return_hook NULL
-// Wrapper macro to generate the setter body using the ITER macros
-#define __SC_GEN_SETTER_BODY_WRAPPER(nr, ...) \
-	do {} while (0) // No-op if Igloo is not enabled
-
 #endif /* CONFIG_IGLOO */
 
 
