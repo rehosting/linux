@@ -6,143 +6,143 @@
  * Copyright (c) 2004 Open Source Development Labs
  */
 
-#ifndef _LINUX_SYSCALLS_H
-#define _LINUX_SYSCALLS_H
-
-struct __aio_sigset;
-struct epoll_event;
-struct iattr;
-struct inode;
-struct iocb;
-struct io_event;
-struct iovec;
-struct __kernel_old_itimerval;
-struct kexec_segment;
-struct linux_dirent;
-struct linux_dirent64;
-struct list_head;
-struct mmap_arg_struct;
-struct msgbuf;
-struct user_msghdr;
-struct mmsghdr;
-struct msqid_ds;
-struct new_utsname;
-struct nfsctl_arg;
-struct __old_kernel_stat;
-struct oldold_utsname;
-struct old_utsname;
-struct pollfd;
-struct rlimit;
-struct rlimit64;
-struct rusage;
-struct sched_param;
-struct sched_attr;
-struct sel_arg_struct;
-struct semaphore;
-struct sembuf;
-struct shmid_ds;
-struct sockaddr;
-struct stat;
-struct stat64;
-struct statfs;
-struct statfs64;
-struct statx;
-struct sysinfo;
-struct timespec;
-struct __kernel_old_timeval;
-struct __kernel_timex;
-struct timezone;
-struct tms;
-struct utimbuf;
-struct mq_attr;
-struct compat_stat;
-struct old_timeval32;
-struct robust_list_head;
-struct futex_waitv;
-struct getcpu_cache;
-struct old_linux_dirent;
-struct perf_event_attr;
-struct file_handle;
-struct sigaltstack;
-struct rseq;
-union bpf_attr;
-struct io_uring_params;
-struct clone_args;
-struct open_how;
-struct mount_attr;
-struct landlock_ruleset_attr;
-struct lsm_ctx;
-enum landlock_rule_type;
-struct cachestat_range;
-struct cachestat;
-struct statmount;
-struct mnt_id_req;
-struct xattr_args;
-
-#include <linux/types.h>
-#include <linux/aio_abi.h>
-#include <linux/capability.h>
-#include <linux/signal.h>
-#include <linux/list.h>
-#include <linux/bug.h>
-#include <linux/sem.h>
-#include <asm/siginfo.h>
-#include <linux/unistd.h>
-#include <linux/quota.h>
-#include <linux/key.h>
-#include <linux/personality.h>
-#include <trace/syscall.h>
-
-#ifdef CONFIG_ARCH_HAS_SYSCALL_WRAPPER
-/*
- * It may be useful for an architecture to override the definitions of the
- * SYSCALL_DEFINE0() and __SYSCALL_DEFINEx() macros, in particular to use a
- * different calling convention for syscalls. To allow for that, the prototypes
- * for the sys_*() functions below will *not* be included if
- * CONFIG_ARCH_HAS_SYSCALL_WRAPPER is enabled.
- */
-#include <asm/syscall_wrapper.h>
-#endif /* CONFIG_ARCH_HAS_SYSCALL_WRAPPER */
-
-/*
- * __MAP - apply a macro to syscall arguments
- * __MAP(n, m, t1, a1, t2, a2, ..., tn, an) will expand to
- *    m(t1, a1), m(t2, a2), ..., m(tn, an)
- * The first argument must be equal to the amount of type/name
- * pairs given.  Note that this list of pairs (i.e. the arguments
- * of __MAP starting at the third one) is in the same format as
- * for SYSCALL_DEFINE<n>/COMPAT_SYSCALL_DEFINE<n>
- */
-#define __MAP0(m,...)
-#define __MAP1(m,t,a,...) m(t,a)
-#define __MAP2(m,t,a,...) m(t,a), __MAP1(m,__VA_ARGS__)
-#define __MAP3(m,t,a,...) m(t,a), __MAP2(m,__VA_ARGS__)
-#define __MAP4(m,t,a,...) m(t,a), __MAP3(m,__VA_ARGS__)
-#define __MAP5(m,t,a,...) m(t,a), __MAP4(m,__VA_ARGS__)
-#define __MAP6(m,t,a,...) m(t,a), __MAP5(m,__VA_ARGS__)
-#define __MAP(n,...) __MAP##n(__VA_ARGS__)
-
-#define __SC_DECL(t, a)	t a
-#define __TYPE_AS(t, v)	__same_type((__force t)0, v)
-#define __TYPE_IS_L(t)	(__TYPE_AS(t, 0L))
-#define __TYPE_IS_UL(t)	(__TYPE_AS(t, 0UL))
-#define __TYPE_IS_LL(t) (__TYPE_AS(t, 0LL) || __TYPE_AS(t, 0ULL))
-#define __SC_LONG(t, a) __typeof(__builtin_choose_expr(__TYPE_IS_LL(t), 0LL, 0L)) a
-#define __SC_CAST(t, a)	(__force t) a
-#define __SC_TYPE(t, a)	t
-#define __SC_ARGS(t, a)	a
-#define __SC_TEST(t, a) (void)BUILD_BUG_ON_ZERO(!__TYPE_IS_LL(t) && sizeof(t) > sizeof(long))
-
-#ifdef CONFIG_FTRACE_SYSCALLS
-#define __SC_STR_ADECL(t, a)	#a
-#define __SC_STR_TDECL(t, a)	#t
-
-extern struct trace_event_class event_class_syscall_enter;
-extern struct trace_event_class event_class_syscall_exit;
-extern struct trace_event_functions enter_syscall_print_funcs;
-extern struct trace_event_functions exit_syscall_print_funcs;
-
-#define SYSCALL_TRACE_ENTER_EVENT(sname)				\
+ #ifndef _LINUX_SYSCALLS_H
+ #define _LINUX_SYSCALLS_H
+ 
+ struct __aio_sigset;
+ struct epoll_event;
+ struct iattr;
+ struct inode;
+ struct iocb;
+ struct io_event;
+ struct iovec;
+ struct __kernel_old_itimerval;
+ struct kexec_segment;
+ struct linux_dirent;
+ struct linux_dirent64;
+ struct list_head;
+ struct mmap_arg_struct;
+ struct msgbuf;
+ struct user_msghdr;
+ struct mmsghdr;
+ struct msqid_ds;
+ struct new_utsname;
+ struct nfsctl_arg;
+ struct __old_kernel_stat;
+ struct oldold_utsname;
+ struct old_utsname;
+ struct pollfd;
+ struct rlimit;
+ struct rlimit64;
+ struct rusage;
+ struct sched_param;
+ struct sched_attr;
+ struct sel_arg_struct;
+ struct semaphore;
+ struct sembuf;
+ struct shmid_ds;
+ struct sockaddr;
+ struct stat;
+ struct stat64;
+ struct statfs;
+ struct statfs64;
+ struct statx;
+ struct sysinfo;
+ struct timespec;
+ struct __kernel_old_timeval;
+ struct __kernel_timex;
+ struct timezone;
+ struct tms;
+ struct utimbuf;
+ struct mq_attr;
+ struct compat_stat;
+ struct old_timeval32;
+ struct robust_list_head;
+ struct futex_waitv;
+ struct getcpu_cache;
+ struct old_linux_dirent;
+ struct perf_event_attr;
+ struct file_handle;
+ struct sigaltstack;
+ struct rseq;
+ union bpf_attr;
+ struct io_uring_params;
+ struct clone_args;
+ struct open_how;
+ struct mount_attr;
+ struct landlock_ruleset_attr;
+ struct lsm_ctx;
+ enum landlock_rule_type;
+ struct cachestat_range;
+ struct cachestat;
+ struct statmount;
+ struct mnt_id_req;
+ struct xattr_args;
+ 
+ #include <linux/types.h>
+ #include <linux/aio_abi.h>
+ #include <linux/capability.h>
+ #include <linux/signal.h>
+ #include <linux/list.h>
+ #include <linux/bug.h>
+ #include <linux/sem.h>
+ #include <asm/siginfo.h>
+ #include <linux/unistd.h>
+ #include <linux/quota.h>
+ #include <linux/key.h>
+ #include <linux/personality.h>
+ #include <trace/syscall.h>
+ 
+ #ifdef CONFIG_ARCH_HAS_SYSCALL_WRAPPER
+ /*
+  * It may be useful for an architecture to override the definitions of the
+  * SYSCALL_DEFINE0() and __SYSCALL_DEFINEx() macros, in particular to use a
+  * different calling convention for syscalls. To allow for that, the prototypes
+  * for the sys_*() functions below will *not* be included if
+  * CONFIG_ARCH_HAS_SYSCALL_WRAPPER is enabled.
+  */
+ #include <asm/syscall_wrapper.h>
+ #endif /* CONFIG_ARCH_HAS_SYSCALL_WRAPPER */
+ 
+ /*
+  * __MAP - apply a macro to syscall arguments
+  * __MAP(n, m, t1, a1, t2, a2, ..., tn, an) will expand to
+  *    m(t1, a1), m(t2, a2), ..., m(tn, an)
+  * The first argument must be equal to the amount of type/name
+  * pairs given.  Note that this list of pairs (i.e. the arguments
+  * of __MAP starting at the third one) is in the same format as
+  * for SYSCALL_DEFINE<n>/COMPAT_SYSCALL_DEFINE<n>
+  */
+ #define __MAP0(m,...)
+ #define __MAP1(m,t,a,...) m(t,a)
+ #define __MAP2(m,t,a,...) m(t,a), __MAP1(m,__VA_ARGS__)
+ #define __MAP3(m,t,a,...) m(t,a), __MAP2(m,__VA_ARGS__)
+ #define __MAP4(m,t,a,...) m(t,a), __MAP3(m,__VA_ARGS__)
+ #define __MAP5(m,t,a,...) m(t,a), __MAP4(m,__VA_ARGS__)
+ #define __MAP6(m,t,a,...) m(t,a), __MAP5(m,__VA_ARGS__)
+ #define __MAP(n,...) __MAP##n(__VA_ARGS__)
+ 
+ #define __SC_DECL(t, a)	t a
+ #define __TYPE_AS(t, v)	__same_type((__force t)0, v)
+ #define __TYPE_IS_L(t)	(__TYPE_AS(t, 0L))
+ #define __TYPE_IS_UL(t)	(__TYPE_AS(t, 0UL))
+ #define __TYPE_IS_LL(t) (__TYPE_AS(t, 0LL) || __TYPE_AS(t, 0ULL))
+ #define __SC_LONG(t, a) __typeof(__builtin_choose_expr(__TYPE_IS_LL(t), 0LL, 0L)) a
+ #define __SC_CAST(t, a)	(__force t) a
+ #define __SC_TYPE(t, a)	t
+ #define __SC_ARGS(t, a)	a
+ #define __SC_TEST(t, a) (void)BUILD_BUG_ON_ZERO(!__TYPE_IS_LL(t) && sizeof(t) > sizeof(long))
+ 
+ #ifdef CONFIG_FTRACE_SYSCALLS
+ #define __SC_STR_ADECL(t, a)	#a
+ #define __SC_STR_TDECL(t, a)	#t
+ 
+ extern struct trace_event_class event_class_syscall_enter;
+ extern struct trace_event_class event_class_syscall_exit;
+ extern struct trace_event_functions enter_syscall_print_funcs;
+ extern struct trace_event_functions exit_syscall_print_funcs;
+ 
+ #define SYSCALL_TRACE_ENTER_EVENT(sname)				\
 	 static struct syscall_metadata __syscall_meta_##sname;		\
 	 static struct trace_event_call __used				\
 	   event_enter_##sname = {					\
@@ -157,8 +157,8 @@ extern struct trace_event_functions exit_syscall_print_funcs;
 	 static struct trace_event_call __used				\
 	   __section("_ftrace_events")					\
 	  *__event_enter_##sname = &event_enter_##sname;
-
-#define SYSCALL_TRACE_EXIT_EVENT(sname)					\
+ 
+ #define SYSCALL_TRACE_EXIT_EVENT(sname)					\
 	 static struct syscall_metadata __syscall_meta_##sname;		\
 	 static struct trace_event_call __used				\
 	   event_exit_##sname = {					\
@@ -173,8 +173,8 @@ extern struct trace_event_functions exit_syscall_print_funcs;
 	 static struct trace_event_call __used				\
 	   __section("_ftrace_events")					\
 	 *__event_exit_##sname = &event_exit_##sname;
-
-#define SYSCALL_METADATA(sname, nb, ...)			\
+ 
+ #define SYSCALL_METADATA(sname, nb, ...)			\
 	 static const char *types_##sname[] = {			\
 		 __MAP(nb,__SC_STR_TDECL,__VA_ARGS__)		\
 	 };							\
@@ -197,87 +197,29 @@ extern struct trace_event_functions exit_syscall_print_funcs;
 	 static struct syscall_metadata __used			\
 	   __section("__syscalls_metadata")			\
 	  *__p_syscall_meta_##sname = &__syscall_meta_##sname;
-
-static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
-{
+ 
+ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
+ {
 	 return tp_event->class == &event_class_syscall_enter ||
 			tp_event->class == &event_class_syscall_exit;
-}
-
-#else
-#define SYSCALL_METADATA(sname, nb, ...)
-
-static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
-{
+ }
+ 
+ #else
+ #define SYSCALL_METADATA(sname, nb, ...)
+ 
+ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
+ {
 	 return 0;
-}
-#endif
-
+ }
+ #endif
+ 
 #ifdef CONFIG_IGLOO
-#include <../drivers/igloo/syscalls_hc.h>
+#include <../drivers/igloo/syscall_wrapper.h>
 /* === Igloo Interception Hooks and Helpers === */
 
 /* Pointers to the actual hook functions */
 extern igloo_syscall_enter_t igloo_syscall_enter_hook;
 extern igloo_syscall_return_t igloo_syscall_return_hook;
-
-
-/* --- Iterative Helper macros to assign argument addresses to an array --- */
-/* These macros operate on the type/name pairs provided via __VA_ARGS__. */
-#define __SC_ASSIGN_ADDR_ITER_0(arr, ...)
-#define __SC_ASSIGN_ADDR_ITER_1(arr, t1, a1) arr[0] = (unsigned long)&a1;
-#define __SC_ASSIGN_ADDR_ITER_2(arr, t1, a1, t2, a2) arr[0] = (unsigned long)&a1; arr[1] = (unsigned long)&a2;
-#define __SC_ASSIGN_ADDR_ITER_3(arr, t1, a1, t2, a2, t3, a3) arr[0] = (unsigned long)&a1; arr[1] = (unsigned long)&a2; arr[2] = (unsigned long)&a3;
-#define __SC_ASSIGN_ADDR_ITER_4(arr, t1, a1, t2, a2, t3, a3, t4, a4) arr[0] = (unsigned long)&a1; arr[1] = (unsigned long)&a2; arr[2] = (unsigned long)&a3; arr[3] = (unsigned long)&a4;
-#define __SC_ASSIGN_ADDR_ITER_5(arr, t1, a1, t2, a2, t3, a3, t4, a4, t5, a5) arr[0] = (unsigned long)&a1; arr[1] = (unsigned long)&a2; arr[2] = (unsigned long)&a3; arr[3] = (unsigned long)&a4; arr[4] = (unsigned long)&a5;
-#define __SC_ASSIGN_ADDR_ITER_6(arr, t1, a1, t2, a2, t3, a3, t4, a4, t5, a5, t6, a6) arr[0] = (unsigned long)&a1; arr[1] = (unsigned long)&a2; arr[2] = (unsigned long)&a3; arr[3] = (unsigned long)&a4; arr[4] = (unsigned long)&a5; arr[5] = (unsigned long)&a6;
-
-/* Wrapper macro: Passes __VA_ARGS__ directly to the ITER macro */
-#define __SC_ASSIGN_ADDR_WRAPPER(nr, arr, ...) \
-	__SC_ASSIGN_ADDR_ITER_##nr(arr, __VA_ARGS__)
-
-// Macro to conditionally perform assignment using __builtin_choose_expr and statement expression
-#define __SC_CONDITIONAL_ASSIGN(idx, type) \
-	{ /* Statement Expression */ \
-		type __temp_val = (type)(uintptr_t)le64_to_cpu(new_args_le64[idx]); \
-		memcpy((void *)(uintptr_t)args_ptr_array[idx], &__temp_val, sizeof(type)); \
-		(void)0; /* Result of the expression */ \
-	}
-
-#define __SC_GEN_SETTER_BODY_ITER_0(...)
-#define __SC_GEN_SETTER_BODY_ITER_1(t1, a1) \
-    __SC_CONDITIONAL_ASSIGN(0, t1);
-#define __SC_GEN_SETTER_BODY_ITER_2(t1, a1, t2, a2) \
-    __SC_CONDITIONAL_ASSIGN(0, t1); \
-    __SC_CONDITIONAL_ASSIGN(1, t2);
-#define __SC_GEN_SETTER_BODY_ITER_3(t1, a1, t2, a2, t3, a3) \
-    __SC_CONDITIONAL_ASSIGN(0, t1); \
-    __SC_CONDITIONAL_ASSIGN(1, t2); \
-    __SC_CONDITIONAL_ASSIGN(2, t3);
-#define __SC_GEN_SETTER_BODY_ITER_4(t1, a1, t2, a2, t3, a3, t4, a4) \
-    __SC_CONDITIONAL_ASSIGN(0, t1); \
-    __SC_CONDITIONAL_ASSIGN(1, t2); \
-    __SC_CONDITIONAL_ASSIGN(2, t3); \
-    __SC_CONDITIONAL_ASSIGN(3, t4);
-#define __SC_GEN_SETTER_BODY_ITER_5(t1, a1, t2, a2, t3, a3, t4, a4, t5, a5) \
-    __SC_CONDITIONAL_ASSIGN(0, t1); \
-    __SC_CONDITIONAL_ASSIGN(1, t2); \
-    __SC_CONDITIONAL_ASSIGN(2, t3); \
-    __SC_CONDITIONAL_ASSIGN(3, t4); \
-    __SC_CONDITIONAL_ASSIGN(4, t5);
-#define __SC_GEN_SETTER_BODY_ITER_6(t1, a1, t2, a2, t3, a3, t4, a4, t5, a5, t6, a6) \
-    __SC_CONDITIONAL_ASSIGN(0, t1); \
-    __SC_CONDITIONAL_ASSIGN(1, t2); \
-    __SC_CONDITIONAL_ASSIGN(2, t3); \
-    __SC_CONDITIONAL_ASSIGN(3, t4); \
-    __SC_CONDITIONAL_ASSIGN(4, t5); \
-    __SC_CONDITIONAL_ASSIGN(5, t6);
-
-// Wrapper macro to generate the setter body using the ITER macros
-#define __SC_GEN_SETTER_BODY_WRAPPER(nr, ...) \
-	__SC_GEN_SETTER_BODY_ITER_##nr(__VA_ARGS__)
-
-
 #else /* CONFIG_IGLOO not defined */
 
 /* Define stubs or original macros if Igloo is disabled */
@@ -294,15 +236,11 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 #ifndef __PROTECT
 #define __PROTECT(...) asmlinkage_protect(__VA_ARGS__)
 #endif /* __PROTECT */
-
-/* ... (Original FTRACE definitions if needed, or potentially guarded by !CONFIG_IGLOO) ... */
-
-/* --- Modified SYSCALL_DEFINE0 --- */
-#ifndef SYSCALL_DEFINE0
-#define SYSCALL_DEFINE0(name)						\
-	SYSCALL_METADATA(_##name, 0); /* Metadata name uses underscore */ \
-	asmlinkage long sys_##name(void);				\
-	ALLOW_ERROR_INJECTION(sys_##name, ERRNO);			\
+ #ifndef SYSCALL_DEFINE0
+ #define SYSCALL_DEFINE0(name)					\
+	SYSCALL_METADATA(_##name, 0);              \
+	asmlinkage long sys_##name(void);			\
+	ALLOW_ERROR_INJECTION(sys_##name, ERRNO);		\
 	static inline long __do_sys_##name(void); /* Declare impl */		\
 	asmlinkage long sys_##name(void)				\
 	{								\
@@ -336,49 +274,52 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 	}								\
 	/* User's syscall code defines the __do_sys_##name function */	\
 	static inline long __do_sys_##name(void)
-#endif /* SYSCALL_DEFINE0 */
-
+ #endif /* SYSCALL_DEFINE0 */
+ 
 
 /* --- Modified SYSCALL_DEFINE1..6 & SYSCALL_DEFINEx --- */
 /* Pass base name AND internal (_name) to SYSCALL_DEFINEx */
-#define SYSCALL_DEFINE1(name, ...) SYSCALL_DEFINEx(1, name, _##name, __VA_ARGS__)
-#define SYSCALL_DEFINE2(name, ...) SYSCALL_DEFINEx(2, name, _##name, __VA_ARGS__)
-#define SYSCALL_DEFINE3(name, ...) SYSCALL_DEFINEx(3, name, _##name, __VA_ARGS__)
-#define SYSCALL_DEFINE4(name, ...) SYSCALL_DEFINEx(4, name, _##name, __VA_ARGS__)
-#define SYSCALL_DEFINE5(name, ...) SYSCALL_DEFINEx(5, name, _##name, __VA_ARGS__)
-#define SYSCALL_DEFINE6(name, ...) SYSCALL_DEFINEx(6, name, _##name, __VA_ARGS__)
-
-#define SYSCALL_DEFINE_MAXARGS	IGLOO_SYSCALL_MAXARGS // Use consistent definition
-
-/* Note: Added 'name' (base name) parameter */
-#define SYSCALL_DEFINEx(x, name, sname, ...)				\
-	SYSCALL_METADATA(sname, x, __VA_ARGS__)				\
-	__SYSCALL_DEFINEx(x, name, sname, __VA_ARGS__) /* Pass both names */
+ #define SYSCALL_DEFINE1(name, ...) SYSCALL_DEFINEx(1, _##name, __VA_ARGS__)
+ #define SYSCALL_DEFINE2(name, ...) SYSCALL_DEFINEx(2, _##name, __VA_ARGS__)
+ #define SYSCALL_DEFINE3(name, ...) SYSCALL_DEFINEx(3, _##name, __VA_ARGS__)
+ #define SYSCALL_DEFINE4(name, ...) SYSCALL_DEFINEx(4, _##name, __VA_ARGS__)
+ #define SYSCALL_DEFINE5(name, ...) SYSCALL_DEFINEx(5, _##name, __VA_ARGS__)
+ #define SYSCALL_DEFINE6(name, ...) SYSCALL_DEFINEx(6, _##name, __VA_ARGS__)
+ 
+ #define SYSCALL_DEFINE_MAXARGS	6
+ #define SYSCALL_DEFINEx(x, name, ...)				\
+	 SYSCALL_METADATA(name, x, __VA_ARGS__)			\
+	 __SYSCALL_DEFINEx(x, name, __VA_ARGS__)
 
 
 /* --- Modified __SYSCALL_DEFINEx --- */
 /* Note: Added 'name' (base name) parameter */
-#ifndef __SYSCALL_DEFINEx
-#define __SYSCALL_DEFINEx(x, name, sname, ...)					\
-	__diag_push();							\
-	__diag_ignore(GCC, 8, "-Wattribute-alias",			\
-			 "Type aliasing is used to sanitize syscall arguments");\
-	/* Linkage alias: sys_##sname -> __se_sys##sname */		\
-	asmlinkage long sys##sname(__MAP(x,__SC_DECL,__VA_ARGS__))	\
-		__attribute__((alias(__stringify(__se_sys##sname))));	\
-	ALLOW_ERROR_INJECTION(sys##sname, ERRNO);			\
-	/* Implementation function declaration */			\
-	static inline long __do_sys##sname(__MAP(x,__SC_DECL,__VA_ARGS__));\
-	/* Setter function definition: Body generated using __SC_GEN_SETTER_BODY_WRAPPER */ \
-	void __igloo_set_args##sname(const unsigned long args_ptr_array[], const __le64 new_args_le64[]); \
-	void __igloo_set_args##sname(const unsigned long args_ptr_array[], const __le64 new_args_le64[]) \
+ 
+ /*
+  * The asmlinkage stub is aliased to a function named __se_sys_*() which
+  * sign-extends 32-bit ints to longs whenever needed. The actual work is
+  * done within __do_sys_*().
+  */
+ #ifndef __SYSCALL_DEFINEx
+ #define __SYSCALL_DEFINEx(x, name, ...)					\
+	 __diag_push();							\
+	 __diag_ignore(GCC, 8, "-Wattribute-alias",			\
+			   "Type aliasing is used to sanitize syscall arguments");\
+	 asmlinkage long sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))	\
+		 __attribute__((alias(__stringify(__se_sys##name))));	\
+	 ALLOW_ERROR_INJECTION(sys##name, ERRNO);			\
+	 	/* Implementation function declaration */			\
+	 static inline long __do_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__));\
+	 /* Setter function definition: Body generated using __SC_GEN_SETTER_BODY_WRAPPER */ \
+	void __igloo_set_args##name(const unsigned long args_ptr_array[], const __le64 new_args_le64[]); \
+	void __igloo_set_args##name(const unsigned long args_ptr_array[], const __le64 new_args_le64[]) \
 	{								\
 		__SC_GEN_SETTER_BODY_WRAPPER(x, __VA_ARGS__);		\
 	}								\
 	/* Sign-extended wrapper function definition */			\
-	asmlinkage long __se_sys##sname(__MAP(x,__SC_LONG,__VA_ARGS__));	\
-	asmlinkage long __se_sys##sname(__MAP(x,__SC_LONG,__VA_ARGS__))	\
-	{								\
+	 asmlinkage long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__));	\
+	 asmlinkage long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__))	\
+	 {								\
 		const char *syscall_basename = __stringify(name); /* Base name */ \
 		long ret;						\
 		bool skip = false;					\
@@ -394,7 +335,7 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 			/* Pass setter function pointer unconditionally (except for 0 args) */ \
 			/* The hook is responsible for handling const args correctly. */ \
 			skip = igloo_syscall_enter_hook(syscall_basename, &skip_ret, x, \
-						 args_ptr_array, __igloo_set_args##sname); \
+						 args_ptr_array, __igloo_set_args##name); \
 		}							\
 									\
 		if (skip) {						\
@@ -404,27 +345,26 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 			/* Execute actual syscall implementation */		\
 			/* Arguments used here are potentially modified */	\
 			/* by the enter hook via the setter function */		\
-			ret = __do_sys##sname(__MAP(x, __SC_CAST, __VA_ARGS__));\
+			ret = __do_sys##name(__MAP(x, __SC_CAST, __VA_ARGS__));\
 		}							\
 									\
 		/* Original type tests */				\
-		__MAP(x,__SC_TEST,__VA_ARGS__);				\
-									\
-		/* === Igloo Return Hook === */				\
-		if (igloo_syscall_return_hook) {			\
-			ret = igloo_syscall_return_hook(syscall_basename, ret, x, \
-						  args_ptr_array); 		\
-		}							\
-									\
-		/* Argument protection and final return */		\
-		__PROTECT(x, ret,__MAP(x,__SC_ARGS,__VA_ARGS__));	\
-		return ret;						\
-	}								\
-	__diag_pop();							\
-	/* User's syscall code defines the __do_sys##sname function */	\
-	static inline long __do_sys##sname(__MAP(x,__SC_DECL,__VA_ARGS__))
-#endif /* __SYSCALL_DEFINEx */
-
+		 __MAP(x,__SC_TEST,__VA_ARGS__);				\
+		 \
+		 /* === Igloo Return Hook === */				\
+		 if (igloo_syscall_return_hook) {			\
+			 ret = igloo_syscall_return_hook(syscall_basename, ret, x, \
+						   args_ptr_array); 		\
+		 }							\
+									 \
+		 /* Argument protection and final return */		\
+		 __PROTECT(x, ret,__MAP(x,__SC_ARGS,__VA_ARGS__));	\
+		 return ret;						\
+	 }								\
+	 __diag_pop();							\
+	 static inline long __do_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))
+ #endif /* __SYSCALL_DEFINEx */
+ 
  /* For split 64-bit arguments on 32-bit architectures */
  #ifdef __LITTLE_ENDIAN
  #define SC_ARG64(name) u32, name##_lo, u32, name##_hi
@@ -432,7 +372,7 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
  #define SC_ARG64(name) u32, name##_hi, u32, name##_lo
  #endif
  #define SC_VAL64(type, name) ((type) name##_hi << 32 | name##_lo)
-
+ 
  #ifdef CONFIG_COMPAT
  #define SYSCALL32_DEFINE0 COMPAT_SYSCALL_DEFINE0
  #define SYSCALL32_DEFINE1 COMPAT_SYSCALL_DEFINE1
@@ -450,8 +390,8 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
  #define SYSCALL32_DEFINE5 SYSCALL_DEFINE5
  #define SYSCALL32_DEFINE6 SYSCALL_DEFINE6
  #endif
-
-/*
+ 
+ /*
   * These syscall function prototypes are kept in the same order as
   * include/uapi/asm-generic/unistd.h. Architecture specific entries go below,
   * followed by deprecated or obsolete system calls.
@@ -1479,4 +1419,4 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 		 int __user *optlen);
  int __sys_setsockopt(int fd, int level, int optname, char __user *optval,
 		 int optlen);
-#endif
+ #endif
