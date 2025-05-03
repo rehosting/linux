@@ -192,21 +192,64 @@ extern long __ia32_sys_ni_syscall(const struct pt_regs *regs);
  * of them.
  */
 #define COMPAT_SYSCALL_DEFINE0(name)					\
-	static long							\
-	__do_compat_sys_##name(const struct pt_regs *__unused);		\
+	static inline long ___do_compat_sys_##name(const struct pt_regs *__unused);	\
+	static long __do_compat_sys_##name(const struct pt_regs *__unused);\
 	__IA32_COMPAT_SYS_STUB0(name)					\
 	__X32_COMPAT_SYS_STUB0(name)					\
-	static long							\
-	__do_compat_sys_##name(const struct pt_regs *__unused)
+	static long __do_compat_sys_##name(const struct pt_regs *__unused)	\
+	{								\
+		long ret;								\
+		bool skip = false;							\
+		long skip_ret = 0;							\
+		unsigned long args_ptr_array[IGLOO_SYSCALL_MAXARGS] = {0};		\
+		/* Igloo enter hook */							\
+		if (igloo_syscall_enter_hook) {					\
+			skip = igloo_syscall_enter_hook(__stringify(name), &skip_ret, 0,	\
+				args_ptr_array, NULL);		\
+		}									\
+		if (skip) {								\
+			ret = skip_ret;							\
+		} else {								\
+			ret = ___do_compat_sys_##name(__unused);	\
+		}									\
+		/* Igloo return hook */							\
+		if (igloo_syscall_return_hook) {					\
+			ret = igloo_syscall_return_hook(__stringify(name), ret, 0, args_ptr_array); \
+		}									\
+		return ret;							\
+	}								\
+	static inline long ___do_compat_sys_##name(const struct pt_regs *__unused)
 
 #define COMPAT_SYSCALL_DEFINEx(x, name, ...)					\
 	static long __se_compat_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__));	\
 	static inline long __do_compat_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__));\
+	void __igloo_set_args_compat##name(const unsigned long args_ptr_array[], const __le64 new_args_le64[]); \
+	void __igloo_set_args_compat##name(const unsigned long args_ptr_array[], const __le64 new_args_le64[]) \
+	{ __SC_GEN_SETTER_BODY_WRAPPER(x, __VA_ARGS__); }					\
 	__IA32_COMPAT_SYS_STUBx(x, name, __VA_ARGS__)				\
 	__X32_COMPAT_SYS_STUBx(x, name, __VA_ARGS__)				\
 	static long __se_compat_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__))	\
 	{									\
-		return __do_compat_sys##name(__MAP(x,__SC_DELOUSE,__VA_ARGS__));\
+		long ret;								\
+		bool skip = false;							\
+		long skip_ret = 0;							\
+		unsigned long args_ptr_array[IGLOO_SYSCALL_MAXARGS] = {0};		\
+		__SC_ASSIGN_ADDR_WRAPPER(x, args_ptr_array, __VA_ARGS__);		\
+		/* Igloo enter hook */							\
+		if (igloo_syscall_enter_hook) {					\
+			skip = igloo_syscall_enter_hook(__stringify(name), &skip_ret, x,	\
+				args_ptr_array, __igloo_set_args_compat##name);		\
+		}									\
+		if (skip) {								\
+			ret = skip_ret;							\
+		} else {								\
+			ret = __do_compat_sys##name(__MAP(x,__SC_DELOUSE,__VA_ARGS__));	\
+		}									\
+		/* Igloo return hook */							\
+		if (igloo_syscall_return_hook) {					\
+			ret = igloo_syscall_return_hook(__stringify(name), ret, x, args_ptr_array); \
+		}									\
+		return ret;								\
 	}									\
 	static inline long __do_compat_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))
 
@@ -223,11 +266,32 @@ extern long __ia32_sys_ni_syscall(const struct pt_regs *regs);
 #define __SYSCALL_DEFINEx(x, name, ...)					\
 	static long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__));	\
 	static inline long __do_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__));\
+	void __igloo_set_args##name(const unsigned long args_ptr_array[], const __le64 new_args_le64[]); \
+	void __igloo_set_args##name(const unsigned long args_ptr_array[], const __le64 new_args_le64[]) \
+	{ __SC_GEN_SETTER_BODY_WRAPPER(x, __VA_ARGS__); }					\
 	__X64_SYS_STUBx(x, name, __VA_ARGS__)				\
 	__IA32_SYS_STUBx(x, name, __VA_ARGS__)				\
 	static long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__))	\
 	{								\
-		long ret = __do_sys##name(__MAP(x,__SC_CAST,__VA_ARGS__));\
+		long ret;								\
+		bool skip = false;							\
+		long skip_ret = 0;							\
+		unsigned long args_ptr_array[IGLOO_SYSCALL_MAXARGS] = {0};		\
+		__SC_ASSIGN_ADDR_WRAPPER(x, args_ptr_array, __VA_ARGS__);		\
+		/* Igloo enter hook */							\
+		if (igloo_syscall_enter_hook) {					\
+			skip = igloo_syscall_enter_hook(__stringify(name), &skip_ret, x,	\
+				args_ptr_array, __igloo_set_args##name);		\
+		}									\
+		if (skip) {								\
+			ret = skip_ret;							\
+		} else {								\
+			ret = __do_sys##name(__MAP(x,__SC_CAST,__VA_ARGS__));	\
+		}									\
+		/* Igloo return hook */							\
+		if (igloo_syscall_return_hook) {					\
+			ret = igloo_syscall_return_hook(__stringify(name), ret, x, args_ptr_array); \
+		}									\
 		__MAP(x,__SC_TEST,__VA_ARGS__);				\
 		__PROTECT(x, ret,__MAP(x,__SC_ARGS,__VA_ARGS__));	\
 		return ret;						\
@@ -243,10 +307,33 @@ extern long __ia32_sys_ni_syscall(const struct pt_regs *regs);
  */
 #define SYSCALL_DEFINE0(sname)						\
 	SYSCALL_METADATA(_##sname, 0);					\
+	static inline long ___do_sys_##sname(const struct pt_regs *__unused);	\
 	static long __do_sys_##sname(const struct pt_regs *__unused);	\
 	__X64_SYS_STUB0(sname)						\
 	__IA32_SYS_STUB0(sname)						\
-	static long __do_sys_##sname(const struct pt_regs *__unused)
+	static long __do_sys_##sname(const struct pt_regs *__unused)	\
+	{								\
+		long ret;								\
+		bool skip = false;							\
+		long skip_ret = 0;							\
+		unsigned long args_ptr_array[IGLOO_SYSCALL_MAXARGS] = {0};		\
+		/* Igloo enter hook */							\
+		if (igloo_syscall_enter_hook) {					\
+			skip = igloo_syscall_enter_hook(__stringify(sname), &skip_ret, 0,	\
+				args_ptr_array, NULL);		\
+		}									\
+		if (skip) {								\
+			ret = skip_ret;							\
+		} else {								\
+			ret = ___do_sys_##sname(__unused);	\
+		}									\
+		/* Igloo return hook */							\
+		if (igloo_syscall_return_hook) {					\
+			ret = igloo_syscall_return_hook(__stringify(sname), ret, 0, args_ptr_array); \
+		}									\
+		return ret;							\
+	}								\
+	static inline long ___do_sys_##sname(const struct pt_regs *__unused)
 
 #define COND_SYSCALL(name)						\
 	__X64_COND_SYSCALL(name)					\
