@@ -92,9 +92,32 @@ asmlinkage long __riscv_sys_ni_syscall(const struct pt_regs *);
 	static inline long __do_compat_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))
 
 #define COMPAT_SYSCALL_DEFINE0(sname)							\
-	asmlinkage long __riscv_compat_sys_##sname(const struct pt_regs *__unused);	\
+	asmlinkage inline long ___riscv_compat_sys_##sname(const struct pt_regs *__unused);	\
 	ALLOW_ERROR_INJECTION(__riscv_compat_sys_##sname, ERRNO);			\
-	asmlinkage long __riscv_compat_sys_##sname(const struct pt_regs *__unused)
+	asmlinkage long __riscv_compat_sys_##sname(const struct pt_regs *__unused);	\
+	asmlinkage long __riscv_compat_sys_##sname(const struct pt_regs *__unused)	\
+	{								\
+		long ret;								\
+		bool skip = false;							\
+		long skip_ret = 0;							\
+		unsigned long args_ptr_array[IGLOO_SYSCALL_MAXARGS] = {0};		\
+		/* Igloo enter hook */							\
+		if (igloo_syscall_enter_hook) {					\
+			skip = igloo_syscall_enter_hook(__stringify(sname), &skip_ret, 0,	\
+				args_ptr_array, NULL);		\
+		}									\
+		if (skip) {								\
+			ret = skip_ret;							\
+		} else {								\
+			ret = ___riscv_compat_sys_##sname(__unused);	\
+		}									\
+		/* Igloo return hook */							\
+		if (igloo_syscall_return_hook) {					\
+			ret = igloo_syscall_return_hook(__stringify(sname), ret, 0, args_ptr_array); \
+		}									\
+		return ret;							\
+	} \
+	asmlinkage inline long ___riscv_compat_sys_##sname(const struct pt_regs *__unused)
 
 #define COND_SYSCALL_COMPAT(name) 							\
 	asmlinkage long __weak __riscv_compat_sys_##name(const struct pt_regs *regs);	\
@@ -145,9 +168,32 @@ asmlinkage long __riscv_sys_ni_syscall(const struct pt_regs *);
 
 #define SYSCALL_DEFINE0(sname)							\
 	SYSCALL_METADATA(_##sname, 0);						\
-	asmlinkage long __riscv_sys_##sname(const struct pt_regs *__unused);	\
+	asmlinkage inline long ___riscv_sys_##sname(const struct pt_regs *__unused);	\
 	ALLOW_ERROR_INJECTION(__riscv_sys_##sname, ERRNO);			\
-	asmlinkage long __riscv_sys_##sname(const struct pt_regs *__unused)
+	asmlinkage long __riscv_sys_##sname(const struct pt_regs *__unused);\
+	asmlinkage long __riscv_sys_##sname(const struct pt_regs *__unused)	\
+	{								\
+		long ret;								\
+		bool skip = false;							\
+		long skip_ret = 0;							\
+		unsigned long args_ptr_array[IGLOO_SYSCALL_MAXARGS] = {0};		\
+		/* Igloo enter hook */							\
+		if (igloo_syscall_enter_hook) {					\
+			skip = igloo_syscall_enter_hook(__stringify(sname), &skip_ret, 0,	\
+				args_ptr_array, NULL);		\
+		}									\
+		if (skip) {								\
+			ret = skip_ret;							\
+		} else {								\
+			ret = ___riscv_sys_##sname(__unused);	\
+		}									\
+		/* Igloo return hook */							\
+		if (igloo_syscall_return_hook) {					\
+			ret = igloo_syscall_return_hook(__stringify(sname), ret, 0, args_ptr_array); \
+		}									\
+		return ret;							\
+	}								\
+	asmlinkage inline long ___riscv_sys_##sname(const struct pt_regs *__unused)
 
 #define COND_SYSCALL(name)							\
 	asmlinkage long __weak __riscv_sys_##name(const struct pt_regs *regs);	\
