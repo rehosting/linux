@@ -62,9 +62,32 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 	static inline long __do_compat_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))
 
 #define COMPAT_SYSCALL_DEFINE0(sname)							\
-	asmlinkage long __arm64_compat_sys_##sname(const struct pt_regs *__unused);	\
+	asmlinkage inline long ___arm64_compat_sys_##sname(const struct pt_regs *__unused);	\
 	ALLOW_ERROR_INJECTION(__arm64_compat_sys_##sname, ERRNO);			\
-	asmlinkage long __arm64_compat_sys_##sname(const struct pt_regs *__unused)
+	asmlinkage long __arm64_compat_sys_##sname(const struct pt_regs *__unused);\
+	asmlinkage long __arm64_compat_sys_##sname(const struct pt_regs *__unused)	\
+	{								\
+		long ret;								\
+		bool skip = false;							\
+		long skip_ret = 0;							\
+		unsigned long args_ptr_array[IGLOO_SYSCALL_MAXARGS] = {0};		\
+		/* Igloo enter hook */							\
+		if (igloo_syscall_enter_hook) {					\
+			skip = igloo_syscall_enter_hook(__stringify(sname), &skip_ret, 0,	\
+				args_ptr_array, NULL);		\
+		}									\
+		if (skip) {								\
+			ret = skip_ret;							\
+		} else {								\
+			ret = ___arm64_compat_sys_##sname(__unused);	\
+		}									\
+		/* Igloo return hook */							\
+		if (igloo_syscall_return_hook) {					\
+			ret = igloo_syscall_return_hook(__stringify(sname), ret, 0, args_ptr_array); \
+		}									\
+		return ret;							\
+	}								\
+	asmlinkage inline long ___arm64_compat_sys_##sname(const struct pt_regs *__unused)
 
 #define COND_SYSCALL_COMPAT(name) 							\
 	asmlinkage long __arm64_compat_sys_##name(const struct pt_regs *regs);		\
@@ -116,9 +139,32 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 
 #define SYSCALL_DEFINE0(sname)							\
 	SYSCALL_METADATA(_##sname, 0);						\
-	asmlinkage long __arm64_sys_##sname(const struct pt_regs *__unused);	\
+	asmlinkage inline long ___arm64_sys_##sname(const struct pt_regs *__unused);	\
 	ALLOW_ERROR_INJECTION(__arm64_sys_##sname, ERRNO);			\
-	asmlinkage long __arm64_sys_##sname(const struct pt_regs *__unused)
+	asmlinkage long __arm64_sys_##sname(const struct pt_regs *__unused);\
+	asmlinkage long __arm64_sys_##sname(const struct pt_regs *__unused)	\
+	{								\
+		long ret;								\
+		bool skip = false;							\
+		long skip_ret = 0;							\
+		unsigned long args_ptr_array[IGLOO_SYSCALL_MAXARGS] = {0};		\
+		/* Igloo enter hook */							\
+		if (igloo_syscall_enter_hook) {					\
+			skip = igloo_syscall_enter_hook(__stringify(sname), &skip_ret, 0,	\
+				args_ptr_array, NULL);		\
+		}									\
+		if (skip) {								\
+			ret = skip_ret;							\
+		} else {								\
+			ret = ___arm64_sys_##sname(__unused);	\
+		}									\
+		/* Igloo return hook */							\
+		if (igloo_syscall_return_hook) {					\
+			ret = igloo_syscall_return_hook(__stringify(sname), ret, 0, args_ptr_array); \
+		}									\
+		return ret;							\
+	}								\
+	asmlinkage inline long ___arm64_sys_##sname(const struct pt_regs *__unused)
 
 #define COND_SYSCALL(name)							\
 	asmlinkage long __arm64_sys_##name(const struct pt_regs *regs);		\
