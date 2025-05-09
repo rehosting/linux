@@ -7,6 +7,7 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <../drivers/igloo/hypercall.h>
+#include <../drivers/igloo/portal.h>
 #include "../internal.h"
 #include "../drivers/igloo/ioctl_hc.h"
 #include "../drivers/igloo/igloo.h"
@@ -399,7 +400,7 @@ static int hyp_file_op(struct hyperfs_data data)
 
 	do {
 		page_in_hyperfs_data(&data);
-		err = igloo_hypercall2(IGLOO_HYPERFS_MAGIC, HYP_FILE_OP,
+		err = igloo_portal(IGLOO_HYPERFS_MAGIC, HYP_FILE_OP,
 				       (unsigned long)&data);
 	} while (err == 0xdeadbeef);
 	return err;
