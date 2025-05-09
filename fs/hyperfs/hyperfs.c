@@ -7,7 +7,7 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <../drivers/igloo/hypercall.h>
-#include <../drivers/igloo/portal.h>
+#include <../drivers/igloo/portal/portal.h>
 #include "../internal.h"
 #include "../drivers/igloo/ioctl_hc.h"
 #include "../drivers/igloo/igloo.h"
