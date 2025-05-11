@@ -11,6 +11,7 @@
 #include "../internal.h"
 #include "../drivers/igloo/ioctl_hc.h"
 #include "../drivers/igloo/igloo.h"
+#include "hyperfs_consts.h"
 
 #define HYPERFS_DEBUG 0
 
@@ -49,14 +50,7 @@ static const match_table_t hyperfs_tokens = {
 	{ HYPERFS_OPT_ERR, NULL },
 };
 
-enum { HYP_FILE_OP, HYP_GET_NUM_HYPERFILES, HYP_GET_HYPERFILE_PATHS };
-
-enum { HYP_READ, HYP_WRITE, HYP_IOCTL, HYP_GETATTR };
-
 enum { DEV_MODE = S_IFREG | 0666, DIR_MODE = S_IFDIR | 0777 };
-
-enum { HYPERFILE_PATH_MAX = 1024 };
-
 struct hyperfs_data {
 	int type;
 	const char *path;
@@ -396,13 +390,13 @@ static void page_in_hyperfs_data(struct hyperfs_data *data)
 
 static int hyp_file_op(struct hyperfs_data data)
 {
-	unsigned long err = 0xdeadbeef;
+	unsigned long err = HYP_RETRY;
 
 	do {
 		page_in_hyperfs_data(&data);
 		err = igloo_portal(IGLOO_HYPERFS_MAGIC, HYP_FILE_OP,
 				       (unsigned long)&data);
-	} while (err == 0xdeadbeef);
+	} while (err == HYP_RETRY);
 	return err;
 }
 
