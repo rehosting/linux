@@ -170,6 +170,9 @@ static int __init igloo_hc_init(void) {
 		printk(KERN_ERR "Failed to register igloo_portal returning %d\n", ret);
 		return ret;
 	}
+
+    /* igloo_netlink_init(); */
+
 	return 0;
 }
 

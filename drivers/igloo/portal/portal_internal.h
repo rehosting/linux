@@ -8,7 +8,7 @@
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
-#include <linux/hashtable.h> 
+#include <linux/hashtable.h>
 #include <linux/net.h>
 #include <linux/inet.h>
 #include <net/inet_sock.h>
@@ -71,5 +71,7 @@ void handle_op_unregister_syscall_hook(portal_region *mem_region);
 
 // FFI operation handler
 void handle_op_ffi_exec(portal_region *mem_region);
+
+void handle_op_reg_netlink(portal_region *mem_region);
 
 #endif /* __PORTAL_INTERNAL_H__ */

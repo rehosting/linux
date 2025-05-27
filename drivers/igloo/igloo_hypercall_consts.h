@@ -60,5 +60,7 @@ enum igloo_hypercall_constants {
     IGLOO_SIGSTOP_ARGV      = 0xbae7babc,
     IGLOO_SIGSTOP_QUERY     = 0x7b7287d5,
     IGLOO_HYPER_REGISTER_MEM_REGION = 0xbebebebe,
-    IGLOO_SYSCALL           = 0x6408400B
+    IGLOO_SYSCALL           = 0x6408400B,
+    IGLOO_HYP_NETLINK_INIT  = 0xf5ad0492, /* crc32("netlink_init") */
+    IGLOO_HYP_NETLINK_RECV  = 0x6a01b24b, /* crc32("netlink_recv") */
 };
