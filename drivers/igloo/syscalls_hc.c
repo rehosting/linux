@@ -633,5 +633,7 @@ int syscalls_hc_init(void) {
     kfree(buffer);
     /* Initialize the hash table */
     hash_init(syscall_hook_table);
+    /* Report initialization as complete */
+    igloo_hypercall(IGLOO_HYP_SETUP_SYSCALL, 0);
     return 0;
 }
