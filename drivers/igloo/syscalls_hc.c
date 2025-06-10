@@ -19,14 +19,48 @@
 #include "kprobe_syscalls.h"
 #include "portal/portal.h"
 
+// Use the syscall_event structure from syscalls_hc.h
+
 igloo_syscall_enter_t igloo_syscall_enter_hook;
 igloo_syscall_return_t igloo_syscall_return_hook;
 
-/* Global hash table and lock for syscall hooks */
-struct hlist_head syscall_hook_table[1024];
+/* Structure to hold matching hook results using kernel lists */
+struct hook_match {
+    struct kernel_syscall_hook *hook;  /* Pointer to the matched hook */
+    struct list_head list;             /* List head for kernel list management */
+};
+
+/* Initialize a list of matching hooks */
+static void init_hook_match_list(struct list_head *match_list)
+{
+    INIT_LIST_HEAD(match_list);
+}
+
+/* Free all hook match entries in a list */
+static void free_hook_match_list(struct list_head *match_list)
+{
+    struct hook_match *match, *tmp;
+    
+    /* Safe list iteration with deletion */
+    list_for_each_entry_safe(match, tmp, match_list, list) {
+        list_del(&match->list);
+        kfree(match);
+    }
+}
+
+/* Global hash tables for organizing hooks */
+struct hlist_head syscall_hook_table[1024];                /* Main table indexed by hook pointer */
+struct hlist_head syscall_name_table[1024];                /* Table indexed by syscall name hash */
+struct hlist_head syscall_all_hooks;                       /* Special list for "match all syscalls" hooks */
 DEFINE_SPINLOCK(syscall_hook_lock);
 
-#define MAX_MATCHING_HOOKS 32
+/* Export symbols for use by other modules */
+EXPORT_SYMBOL(syscall_hook_table);
+EXPORT_SYMBOL(syscall_name_table);
+EXPORT_SYMBOL(syscall_all_hooks);
+EXPORT_SYMBOL(syscall_hook_lock);
+
+// syscall_name_hash is now defined in syscalls_hc.h
 
 // Define IGLOO_DEBUG=1 during compilation to enable debug prints
 #ifdef IGLOO_DEBUG
@@ -37,23 +71,6 @@ DEFINE_SPINLOCK(syscall_hook_lock);
 
 extern struct syscall_metadata *__start_syscalls_metadata[];
 extern struct syscall_metadata *__stop_syscalls_metadata[];
-
-// add 1 if the struct syscall_event changes
-#define SYSCALL_HC_KNOWN_MAGIC 0x1234  // Incremented due to structure change
-#define SYSCALL_NAME_MAX_LEN 48        // Maximum length for syscall name
-
-struct syscall_event {
-    u16 known_magic;                   /* Magic value to validate structure integrity */
-    u32 id;                            /* Hook ID that triggered this event */
-    u32 argc;                          /* Number of arguments */
-    uint64_t args[IGLOO_SYSCALL_MAXARGS]; /* Syscall arguments */
-    uint64_t pc;                       /* Program counter */
-    long retval;                       /* Return value */
-    bool skip_syscall;                 /* Flag to skip syscall execution */
-    struct task_struct *task;          /* Task pointer */
-    struct pt_regs *regs;              /* Pointer to current registers */
-    char syscall_name[SYSCALL_NAME_MAX_LEN]; /* Name of syscall (embedded in structure) */
-} __packed __aligned(8);               /* Ensure 8-byte alignment */
 
 // Replace mutex with spinlock which is safe for atomic contexts
 DEFINE_SPINLOCK(syscall_hc_lock); // Keep commented out unless hypercall needs external locking
@@ -67,8 +84,7 @@ void print_syscall_info(const struct syscall_event *sc, const char *prefix) {
     }
     
     printk(KERN_INFO "IGLOO: %s Syscall Info --------\n", prefix ? prefix : "");
-    printk(KERN_INFO "  Magic: 0x%x\n", sc->known_magic);
-    printk(KERN_INFO "  Hook ID: %u\n", sc->id);
+    printk(KERN_INFO "  Hook Ptr: %p\n", sc->hook);
     printk(KERN_INFO "  Syscall Name: %s\n", sc->syscall_name);
     printk(KERN_INFO "  PC: 0x%llx\n", sc->pc);
     printk(KERN_INFO "  Return Val: %ld\n", sc->retval);
@@ -83,12 +99,11 @@ void print_syscall_info(const struct syscall_event *sc, const char *prefix) {
     printk(KERN_INFO "IGLOO: ------------------------\n");
 }
 
-static void fill_handler(struct syscall_event *args, int argc, const unsigned long args_ptrs[], u32 hook_id, const char* syscall_name) {
+static void fill_handler(struct syscall_event *args, int argc, const unsigned long args_ptrs[], struct syscall_hook* hook_ptr, const char* syscall_name) {
     struct pt_regs *regs;
     
     // Fill the syscall structure with arguments
-    args->known_magic = SYSCALL_HC_KNOWN_MAGIC;
-    args->id = hook_id;
+    args->hook = hook_ptr; // Store the hook pointer directly
     args->skip_syscall = false;
     args->argc = argc;
     
@@ -144,13 +159,59 @@ static void do_hyp(bool is_enter, struct syscall_event* args) {
                 sequence, (unsigned long)args);
 }
 
+/* Check if a value matches a filter */
+bool value_matches_filter(long value, const struct value_filter *filter)
+{
+    if (!filter->enabled) {
+        return true; // No filtering, always matches
+    }
+    
+    switch (filter->type) {
+        case SYSCALLS_HC_FILTER_EXACT:
+            return value == filter->value;
+            
+        case SYSCALLS_HC_FILTER_GREATER:
+            return value > filter->value;
+            
+        case SYSCALLS_HC_FILTER_GREATER_EQUAL:
+            return value >= filter->value;
+            
+        case SYSCALLS_HC_FILTER_LESS:
+            return value < filter->value;
+            
+        case SYSCALLS_HC_FILTER_LESS_EQUAL:
+            return value <= filter->value;
+            
+        case SYSCALLS_HC_FILTER_NOT_EQUAL:
+            return value != filter->value;
+            
+        case SYSCALLS_HC_FILTER_RANGE:
+            return value >= filter->min_value && value <= filter->max_value;
+            
+        case SYSCALLS_HC_FILTER_SUCCESS:
+            return value >= 0;
+            
+        case SYSCALLS_HC_FILTER_ERROR:
+            return value < 0;
+            
+        case SYSCALLS_HC_FILTER_BITMASK_SET:
+            return (value & filter->bitmask) == filter->bitmask;
+            
+        case SYSCALLS_HC_FILTER_BITMASK_CLEAR:
+            return (value & filter->bitmask) == 0;
+            
+        default:
+            // Unknown filter type, assume no match
+            return false;
+    }
+}
+
 // Check if a syscall matches a hook's criteria
 bool hook_matches_syscall(struct syscall_hook *hook, const char *syscall_name, 
                          int argc, const unsigned long args[])
 {
     // If hook is disabled, it doesn't match
     if (!hook->enabled){
-        // printk(KERN_EMERG "Failed on hook enabled check: %d\n", hook->enabled);
         return false;
     }
     
@@ -161,8 +222,10 @@ bool hook_matches_syscall(struct syscall_hook *hook, const char *syscall_name,
     
     // Check if we need to match syscall name
     if (syscall_name && hook->name[0] != '\0') {
-        if (strcmp(hook->name, syscall_name) != 0 && strcmp(hook->name, syscall_name+1) != 0){
-            // printk(KERN_EMERG "Failed on syscall name match: %s != %s\n", hook->name, syscall_name);
+        const char *normalized_hook = normalize_syscall_name(hook->name);
+        const char *normalized_syscall = normalize_syscall_name(syscall_name);
+        
+        if (strcmp(normalized_hook, normalized_syscall) != 0) {
             return false;
         }
     } else if (hook->name[0] != '\0') {
@@ -173,7 +236,6 @@ bool hook_matches_syscall(struct syscall_hook *hook, const char *syscall_name,
     // If comm_filter is enabled, check process name
     if (hook->comm_filter_enabled) {
         if (strncmp(current->comm, hook->comm_filter, TASK_COMM_LEN) != 0){
-            // printk(KERN_EMERG "Failed on comm filter: %s != %s\n", current->comm, hook->comm_filter);
             return false;
         }
     }
@@ -181,30 +243,253 @@ bool hook_matches_syscall(struct syscall_hook *hook, const char *syscall_name,
     // If PID filter is enabled, check the current process ID
     if (hook->pid_filter_enabled) {
         if (task_pid_nr(current) != hook->filter_pid){
-            // printk(KERN_EMERG "Failed on PID filter: %d != %d\n", task_pid_nr(current), hook->filter_pid);
             return false;
         }
     }
     
-    // If arg filtering is enabled, check arguments - with safety checks
-    if (hook->filter_args_enabled) {
-        for (int i = 0; i < IGLOO_SYSCALL_MAXARGS && i < argc; i++) {
-            if (hook->filter_arg[i]) {
-                unsigned long arg_ptr = args[i];
-		        unsigned long arg_val = *(unsigned long *)arg_ptr;
-		        if (arg_val != hook->arg_filter[i]) {
-		        	// printk(KERN_EMERG
-		        	//        "Failed on arg filter[%d]: %lx != %lx\n",
-		        	//        i, arg_val, hook->arg_filter[i]);
-		        	return false;
-		        }
+    // Check argument filters with complex comparisons
+    for (int i = 0; i < IGLOO_SYSCALL_MAXARGS && i < argc; i++) {
+        if (hook->arg_filters[i].enabled) {
+            unsigned long arg_ptr = args[i];
+            long arg_val = *(long *)arg_ptr;
+            if (!value_matches_filter(arg_val, &hook->arg_filters[i])) {
+                return false;
             }
         }
     }
-    // printk(KERN_EMERG "IGLOO: Hook matches syscall %s\n", syscall_name);
     
     // All criteria matched
     return true;
+}
+
+// Function to check if a syscall return value matches a hook's criteria
+bool hook_matches_syscall_return(struct syscall_hook *hook, const char *syscall_name, 
+                                 int argc, const unsigned long args[], long retval)
+{
+    // First check all the regular criteria
+    if (!hook_matches_syscall(hook, syscall_name, argc, args)) {
+        return false;
+    }
+    
+    // Check return value filter with complex comparisons
+    if (!value_matches_filter(retval, &hook->retval_filter)) {
+        return false;
+    }
+    
+    return true;
+}
+
+/* Collect hooks that match a syscall by name and context */
+static struct list_head *collect_matching_hooks(
+    const char *syscall_name,
+    int argc,
+    const unsigned long args[],
+    bool for_entry,
+    long orig_ret)
+{
+    struct kernel_syscall_hook *hook;
+    struct hlist_node *tmp;
+    struct list_head *match_list;
+    int num_matching_hooks = 0;
+    
+    // Allocate the list head
+    match_list = kmalloc(sizeof(struct list_head), GFP_ATOMIC);
+    if (!match_list) {
+        DBG_PRINTK("IGLOO: Failed to allocate memory for hook match list\n");
+        return NULL;
+    }
+    
+    // Initialize the list
+    init_hook_match_list(match_list);
+    
+    spin_lock(&syscall_hook_lock);
+    
+    // 1. Check the "match all syscalls" list first (usually small)
+    hlist_for_each_entry_safe(hook, tmp, &syscall_all_hooks, name_hlist) {
+        bool matches = false;
+        if (for_entry) {
+            // For entry handlers, check on_enter flag
+            matches = hook->hook.on_enter && hook_matches_syscall(&hook->hook, syscall_name, argc, args);
+        } else {
+            // For return handlers, check on_return flag and return value filters
+            matches = hook->hook.on_return && hook_matches_syscall_return(&hook->hook, syscall_name, argc, args, orig_ret);
+        }
+        
+        if (matches) {
+            struct hook_match *match = kmalloc(sizeof(struct hook_match), GFP_ATOMIC);
+            if (!match) {
+                DBG_PRINTK("IGLOO: Failed to allocate memory for hook match\n");
+                continue; // Skip this match but try to continue with others
+            }
+            
+            match->hook = hook;
+            list_add_tail(&match->list, match_list);
+            num_matching_hooks++;
+            DBG_PRINTK("IGLOO: Added matching hook for syscall %s (all hooks list)\n", syscall_name);
+        }
+    }
+    
+    // 2. Then check hooks specific to this syscall name (hash lookup)
+    if (syscall_name) {
+        u32 name_hash = syscall_name_hash(syscall_name);
+        hash_for_each_possible_safe(syscall_name_table, hook, tmp, name_hlist, name_hash) {
+            bool matches = false;
+            if (for_entry) {
+                // For entry handlers, check on_enter flag
+                matches = hook->hook.on_enter && hook_matches_syscall(&hook->hook, syscall_name, argc, args);
+            } else {
+                // For return handlers, check on_return flag and return value filters
+                matches = hook->hook.on_return && hook_matches_syscall_return(&hook->hook, syscall_name, argc, args, orig_ret);
+            }
+            
+            if (matches) {
+                struct hook_match *match = kmalloc(sizeof(struct hook_match), GFP_ATOMIC);
+                if (!match) {
+                    DBG_PRINTK("IGLOO: Failed to allocate memory for hook match\n");
+                    continue; // Skip this match but try to continue with others
+                }
+                
+                match->hook = hook;
+                list_add_tail(&match->list, match_list);
+                num_matching_hooks++;
+                DBG_PRINTK("IGLOO: Added matching hook for syscall %s (name hash)\n", syscall_name);
+            }
+        }
+    }
+    
+    spin_unlock(&syscall_hook_lock);
+    DBG_PRINTK("IGLOO: Found %d matching hooks for syscall %s\n", num_matching_hooks, syscall_name);
+    
+    return match_list;
+}
+
+/* Process syscall entry hooks - returns true if syscall should be skipped */
+static bool process_entry_hooks(
+    const char *syscall_name,
+    struct list_head *match_list,
+    int argc, 
+    const unsigned long args[],
+    igloo_syscall_setter_t setter_func,
+    long *skip_ret_val)
+{
+    struct syscall_event syscall_args_holder, original_info;
+    bool skip_syscall = false;
+    long skip_ret_val_local = 0;
+    struct hook_match *match;
+    int hook_idx = 0;
+    
+    // No hooks matched, early return
+    if (list_empty(match_list)) {
+        DBG_PRINTK("IGLOO: No hooks matched for syscall %s, skipping hypercalls\n", syscall_name);
+        return false;
+    }
+    
+    // Process each matching hook
+    list_for_each_entry(match, match_list, list) {
+        struct kernel_syscall_hook *matched_hook = match->hook;
+        hook_idx++;
+        
+        // Fill syscall args structure for this hook
+        fill_handler(&syscall_args_holder, argc, args, &matched_hook->hook, syscall_name);
+        
+        // Keep a copy for comparison
+        memcpy(&original_info, &syscall_args_holder, sizeof(struct syscall_event));
+        
+        DBG_PRINTK("IGLOO: Syscall %s matched hook at %p (hook #%d)\n", 
+                  syscall_name, matched_hook, hook_idx);
+        
+        // Make the hypercall for this hook
+        do_hyp(true, &syscall_args_holder);
+        
+        // Check if arguments were modified
+        bool was_modified = false;
+        for (int i = 0; i < IGLOO_SYSCALL_MAXARGS && i < argc; i++) {
+            if (syscall_args_holder.args[i] != original_info.args[i]) {
+                DBG_PRINTK("Hypercall modified arg[%d]: old=0x%lx, new=0x%lx\n",
+                          i, original_info.args[i], syscall_args_holder.args[i]);
+                was_modified = true;
+                break;
+            }
+        }
+        
+        if (was_modified && setter_func && args) {
+            // Cast to the expected type (__le64 *) to match the function signature
+            setter_func(args, (const __le64 *)&syscall_args_holder.args[0]);
+        }
+        
+        // Check if syscall should be skipped
+        if (syscall_args_holder.skip_syscall) {
+            skip_syscall = true;
+            skip_ret_val_local = syscall_args_holder.retval;
+            DBG_PRINTK("IGLOO: Hook %p requested to skip syscall %s with return value %lx\n", 
+                      matched_hook, syscall_name, skip_ret_val_local);
+            break; // Exit early if any hook requests to skip
+        }
+    }
+    
+    // Clean up the match list
+    free_hook_match_list(match_list);
+    kfree(match_list);
+    
+    // If any hook requested to skip the syscall, set the return value and return true
+    if (skip_syscall) {
+        *skip_ret_val = skip_ret_val_local;
+        return true;
+    }
+    
+    return false;
+}
+
+/* Process syscall return hooks - returns the (possibly modified) return value */
+static long process_return_hooks(
+    const char *syscall_name,
+    struct list_head *match_list,
+    int argc, 
+    const unsigned long args[],
+    long orig_ret)
+{
+    struct syscall_event syscall_args_holder;
+    long modified_ret = orig_ret;
+    struct hook_match *match;
+    int hook_idx = 0;
+    
+    // No hooks matched, early return with original value
+    if (list_empty(match_list)) {
+        DBG_PRINTK("IGLOO: No hooks matched for syscall %s return, skipping hypercalls\n", syscall_name);
+        return orig_ret;
+    }
+    
+    // Process each matching hook
+    list_for_each_entry(match, match_list, list) {
+        struct kernel_syscall_hook *matched_hook = match->hook;
+        hook_idx++;
+        
+        // Fill syscall args structure for this hook
+        fill_handler(&syscall_args_holder, argc, args, &matched_hook->hook, syscall_name);
+        
+        // Update the return value
+        syscall_args_holder.retval = modified_ret;
+        
+        DBG_PRINTK("IGLOO: Syscall %s return matched hook at %p (hook #%d) with retval=%ld\n", 
+                  syscall_name, matched_hook, hook_idx, modified_ret);
+        
+        // Make the hypercall for this hook
+        do_hyp(false, &syscall_args_holder);
+        
+        // Check if return value was modified
+        long new_ret = syscall_args_holder.retval;
+        if (new_ret != modified_ret) {
+            DBG_PRINTK("Hypercall modified return value: old=%ld, new=%ld\n",
+                      modified_ret, new_ret);
+            modified_ret = new_ret;
+        }
+    }
+    
+    // Clean up the match list
+    free_hook_match_list(match_list);
+    kfree(match_list);
+    
+    return modified_ret;
 }
 
 //Entry handler for system calls
@@ -228,96 +513,14 @@ static bool syscall_entry_handler(const char *syscall_name, long *skip_ret_val, 
         safe_args[i] = args[i];  // These are values, not pointers to values
     }
     
-    // Check for hooks that match this syscall
-    struct kernel_syscall_hook *hook;
-    bool any_hook_matched = false;
-    struct syscall_event syscall_args_holder, original_info;
-    bool skip_syscall = false;
-    long skip_ret_val_local = 0;
-    
-    // For collecting matching hooks
-    u32 matching_hook_ids[MAX_MATCHING_HOOKS];
-    int num_matching_hooks = 0;
-    
-    // First, safely collect all matching hook IDs
-    int i;
-    struct hlist_node *tmp;
-    
-    spin_lock(&syscall_hook_lock);
-    hash_for_each_safe(syscall_hook_table, i, tmp, hook, hlist) {
-        if (hook->hook.on_enter && hook_matches_syscall(&hook->hook, syscall_name, argc, safe_args)) {
-            if (num_matching_hooks < MAX_MATCHING_HOOKS) {
-                matching_hook_ids[num_matching_hooks++] = hook->hook.id;
-                any_hook_matched = true;
-            } else {
-                DBG_PRINTK("IGLOO: Too many matching hooks for syscall %s, some will be ignored\n", syscall_name);
-                break;
-            }
-        }
-    }
-    spin_unlock(&syscall_hook_lock);
-    
-    // If no hooks matched, we can skip the hypercall entirely
-    if (!any_hook_matched) {
-        DBG_PRINTK("IGLOO: No hooks matched for syscall %s, skipping hypercalls\n", syscall_name);
-        return false;
+    // Collect matching hooks
+    struct list_head *match_list = collect_matching_hooks(syscall_name, argc, safe_args, true, 0);
+    if (!match_list) {
+        return false;  // Allocation failed, can't process hooks
     }
     
-    // Now process each matching hook without holding the lock
-    for (int hook_idx = 0; hook_idx < num_matching_hooks; hook_idx++) {
-        u32 matched_hook_id = matching_hook_ids[hook_idx];
-        
-        // Fill syscall args structure once - we'll use it for all matching hooks
-        fill_handler(&syscall_args_holder, argc, safe_args, matched_hook_id, syscall_name);
-        
-        // Make a local copy for this hook
-        memcpy(&original_info, &syscall_args_holder, sizeof(struct syscall_event));
-        
-        DBG_PRINTK("IGLOO: Syscall %s matched hook ID %u (%d of %d)\n", 
-                  syscall_name, matched_hook_id, hook_idx + 1, num_matching_hooks);
-        
-        // Make the hypercall for this hook
-        do_hyp(true, &syscall_args_holder);
-        
-        // Check if arguments were modified
-        bool was_modified = false;
-        for (int i = 0; i < IGLOO_SYSCALL_MAXARGS && i < argc; i++) {
-            if (syscall_args_holder.args[i] != original_info.args[i]) {
-                DBG_PRINTK("Hypercall modified arg[%d]: old=0x%lx, new=0x%lx\n",
-                          i, original_info.args[i], syscall_args_holder.args[i]);
-                was_modified = true;
-                break;
-            }
-        }            
-        if (was_modified && setter_func && args) {
-            // Cast to the expected type (__le64 *) to match the function signature
-            setter_func(args, (const __le64 *)&syscall_args_holder.args[0]);
-        }
-        
-        // Check if syscall should be skipped
-        if (syscall_args_holder.skip_syscall) {
-            skip_syscall = true;
-            skip_ret_val_local = syscall_args_holder.retval;
-            DBG_PRINTK("IGLOO: Hook %u requested to skip syscall %s with return value %lx\n", 
-                      matched_hook_id, syscall_name, skip_ret_val_local);
-            break; // Exit early if any hook requests to skip
-        }
-    }
-    
-    // If any hook requested to skip the syscall, do so
-    if (skip_syscall) {
-        *skip_ret_val = skip_ret_val_local;
-        return true;
-    }
-    
-    // If no hooks matched, we didn't do anything
-    if (!any_hook_matched) {
-        DBG_PRINTK("IGLOO: No hooks matched for syscall %s, skipping hypercall\n", syscall_name);
-        return 0;
-    }
-    
-    // Continue with syscall execution - we already processed all matches above
-    return false;
+    // Process entry hooks
+    return process_entry_hooks(syscall_name, match_list, argc, safe_args, setter_func, skip_ret_val);
 }
 
 // Return handler for system calls
@@ -331,73 +534,14 @@ static long syscall_ret_handler(const char *syscall_name, long orig_ret, int arg
         return orig_ret;
     }
     
-    // Check for hooks that match this syscall
-    struct kernel_syscall_hook *hook;
-    bool any_hook_matched = false;
-    struct syscall_event syscall_args_holder;
-    long modified_ret = orig_ret;
-    
-    // For collecting matching hooks
-    u32 matching_hook_ids[MAX_MATCHING_HOOKS];
-    int num_matching_hooks = 0;
-    
-    // First, safely collect all matching hook IDs
-    int i;
-    struct hlist_node *tmp;
-    
-    spin_lock(&syscall_hook_lock);
-    hash_for_each_safe(syscall_hook_table, i, tmp, hook, hlist) {
-        if (hook->hook.on_return && hook_matches_syscall(&hook->hook, syscall_name, argc, args)) {
-            if (num_matching_hooks < MAX_MATCHING_HOOKS) {
-                matching_hook_ids[num_matching_hooks++] = hook->hook.id;
-                any_hook_matched = true;
-            } else {
-                DBG_PRINTK("IGLOO: Too many matching hooks for syscall %s return, some will be ignored\n", syscall_name);
-                break;
-            }
-        }
-    }
-    spin_unlock(&syscall_hook_lock);
-    
-    // If no hooks matched, we can skip the hypercall entirely
-    if (!any_hook_matched) {
-        DBG_PRINTK("IGLOO: No hooks matched for syscall %s return, skipping hypercalls\n", syscall_name);
-        return orig_ret;
+    // Collect matching hooks
+    struct list_head *match_list = collect_matching_hooks(syscall_name, argc, args, false, orig_ret);
+    if (!match_list) {
+        return orig_ret;  // Allocation failed, can't process hooks
     }
     
-    // Now process each matching hook without holding the lock
-    for (int hook_idx = 0; hook_idx < num_matching_hooks; hook_idx++) {
-        u32 matched_hook_id = matching_hook_ids[hook_idx];
-        
-        // Fill syscall args structure once - we'll use it for all matching hooks
-        fill_handler(&syscall_args_holder, argc, args, matched_hook_id, syscall_name);
-        
-        // Update the return value
-        syscall_args_holder.retval = modified_ret;
-        
-        DBG_PRINTK("IGLOO: Syscall %s return matched hook ID %u (%d of %d)\n", 
-                  syscall_name, matched_hook_id, hook_idx + 1, num_matching_hooks);
-        
-        // Make the hypercall for this hook
-        do_hyp(false, &syscall_args_holder);
-        
-        // Check if return value was modified
-        long new_ret = syscall_args_holder.retval;
-        if (new_ret != modified_ret) {
-            DBG_PRINTK("Hypercall modified return value: old=%ld, new=%ld\n",
-                      modified_ret, new_ret);
-            modified_ret = new_ret;
-        }
-    }
-    
-    // If no hooks matched, just return the original value
-    if (!any_hook_matched) {
-        DBG_PRINTK("IGLOO: No hooks matched for syscall %s return, skipping hypercall\n", syscall_name);
-        return orig_ret;
-    }
-    
-    // Return the potentially modified value
-    return modified_ret;
+    // Process return hooks
+    return process_return_hooks(syscall_name, match_list, argc, args, orig_ret);
 }
 
 #ifndef ARCH_HAS_SYSCALL_MATCH_SYM_NAME
@@ -445,7 +589,7 @@ static void report_syscall(char * buffer, struct syscall_metadata *meta){
     // Prepare JSON metadata for hypercall (ensure buffer is large enough)
     int x = snprintf(buffer, PAGE_SIZE,
                    "{\"name\": \"%s\", \"args\":[",
-                    meta->name);
+                    normalize_syscall_name(meta->name));
 
     for (int j = 0; j < meta->nb_args && x > 0 && x < PAGE_SIZE; j++) {
         // Append args safely, checking remaining buffer space
@@ -467,6 +611,8 @@ static void report_syscall(char * buffer, struct syscall_metadata *meta){
     // Send metadata via hypercall (call returns value, but it's ignored here)
     igloo_hypercall(IGLOO_HYP_SETUP_SYSCALL, (unsigned long)buffer);
 }
+
+// normalize_syscall_name is now defined in syscalls_hc.h
 
 #ifdef CONFIG_COMPAT
 /* For ARM64 */
@@ -503,6 +649,7 @@ extern const syscall_fn_t compat_sys_call_table[];
 #endif
 
 /* Get syscall name from a function pointer */
+#ifdef CONFIG_COMPAT
 static const char *get_syscall_name_from_func(void *func_ptr) {
     char sym[KSYM_SYMBOL_LEN];
     
@@ -544,7 +691,8 @@ static void report_syscall_from_func(char *buffer, void *func_ptr, int syscall_n
         return;
     
     /* Create a simplified metadata report for compat syscalls */
-    x = snprintf(buffer, PAGE_SIZE, "{\"name\": \"%s\", \"compat\": true, \"args\":\"unknown\"}", name);
+    x = snprintf(buffer, PAGE_SIZE, "{\"name\": \"%s\", \"compat\": true, \"args\":\"unknown\"}", 
+                normalize_syscall_name(name));
     
     if (x > 0 && x < PAGE_SIZE) {
         /* Send this metadata via hypercall */
@@ -553,6 +701,7 @@ static void report_syscall_from_func(char *buffer, void *func_ptr, int syscall_n
     
     kfree(name);
 }
+#endif
 
 int syscalls_hc_init(void) {
     printk(KERN_EMERG "IGLOO: Initializing syscall hypercalls\n");
@@ -635,3 +784,29 @@ int syscalls_hc_init(void) {
     hash_init(syscall_hook_table);
     return 0;
 }
+
+/* Unregister a syscall hook */
+int unregister_syscall_hook(struct kernel_syscall_hook *hook_ptr)
+{
+    if (!hook_ptr)
+        return -EINVAL;
+    
+    spin_lock(&syscall_hook_lock);
+    
+    // Remove from main hash table
+    hash_del(&hook_ptr->hlist);
+    
+    // Remove from name-based hash table if it was added
+    if (hook_ptr->hook.on_all) {
+        hlist_del(&hook_ptr->name_hlist);
+    } else if (hook_ptr->hook.name[0] != '\0') {
+        hlist_del(&hook_ptr->name_hlist);
+    }
+    
+    spin_unlock(&syscall_hook_lock);
+    
+    // Free the hook
+    kfree(hook_ptr);
+    return 0;
+}
+

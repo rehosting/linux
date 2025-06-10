@@ -27,7 +27,6 @@ static const portal_op_handler op_handlers[] = {
     [HYPER_OP_REGISTER_UPROBE] = handle_op_register_uprobe,
     [HYPER_OP_UNREGISTER_UPROBE] = handle_op_unregister_uprobe,
     [HYPER_OP_REGISTER_SYSCALL_HOOK] = handle_op_register_syscall_hook,
-    [HYPER_OP_UNREGISTER_SYSCALL_HOOK] = handle_op_unregister_syscall_hook,
     [HYPER_OP_FFI_EXEC] = handle_op_ffi_exec,
 };
 
