@@ -7,11 +7,15 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <../drivers/igloo/hypercall.h>
-#include <../drivers/igloo/portal/portal.h>
 #include "../internal.h"
-#include "../drivers/igloo/ioctl_hc.h"
 #include "../drivers/igloo/igloo.h"
 #include "hyperfs_consts.h"
+
+extern int igloo_portal(unsigned long num, unsigned long arg1,
+          unsigned long arg2) __attribute__((weak));
+extern void igloo_enoent(struct dentry *dentry) __attribute__((weak));
+extern void igloo_enoent_path(const char *path) __attribute__((weak));
+extern void igloo_ioctl(int error, struct file *filp, unsigned int cmd) __attribute__((weak));
 
 #define HYPERFS_DEBUG 0
 

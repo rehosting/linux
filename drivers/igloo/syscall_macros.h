@@ -51,8 +51,10 @@ typedef long (*igloo_syscall_return_t)(const char *syscall_name,
 				   long retval, int argc,
 				   const unsigned long args[]);
 
+#ifdef CONFIG_IGLOO
 extern igloo_syscall_enter_t igloo_syscall_enter_hook;
 extern igloo_syscall_return_t igloo_syscall_return_hook;
+#endif
 
 
 #define IGLOO_SYSCALL_MAXARGS 6
