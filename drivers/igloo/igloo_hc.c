@@ -151,11 +151,6 @@ early_param("igloo_debug", early_igloo_debug_modules);
 static int __init igloo_hc_init(void) {
 	printk(KERN_EMERG "IGLOO: Initializing\n");
 	int ret = 0;
-	if ((ret = vma_hc_init()) != 0) {
-        printk(KERN_ERR "Failed to register vma_hc\n");
-		return ret;
-	}
-
     if ((ret = osi_hc_init()) != 0) {
         printk(KERN_ERR "Failed to register osi_hc\n");
         return ret;
