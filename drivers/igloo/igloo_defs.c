@@ -38,10 +38,7 @@ bool __weak igloo_should_block_mount(struct path *path)
 
 void __weak igloo_sock_release(struct socket *sock) { }
 
-int __weak igloo_sock_bind(struct socket *sock, struct sockaddr_storage *address)
-{
-    return 0;
-}
+void __weak igloo_sock_bind(struct socket *sock, struct sockaddr_storage *address) {}
 
 void __weak igloo_hc_newuname(struct new_utsname *name) {}
 
