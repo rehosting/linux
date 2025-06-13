@@ -2,6 +2,7 @@
 #include <linux/fs.h>
 #include <linux/net.h>
 #include <linux/socket.h>
+#include <linux/module.h>
 #include "syscall_macros.h"
 #include "igloo.h"
 
@@ -22,25 +23,34 @@ struct user_arg_ptr {
 /* Syscall hooks */
 igloo_syscall_enter_t __weak igloo_syscall_enter_hook = NULL;
 igloo_syscall_return_t __weak igloo_syscall_return_hook = NULL;
+EXPORT_SYMBOL(igloo_syscall_enter_hook);
+EXPORT_SYMBOL(igloo_syscall_return_hook);
 
 /* File system related functions */
 void __weak igloo_hc_open(int dfd, struct filename *tmp, int fd) { }
+EXPORT_SYMBOL(igloo_hc_open);
 
 void __weak igloo_exec_succeeded(struct filename *filename,
     struct user_arg_ptr argv, struct user_arg_ptr envp, struct linux_binprm *bprm) {}
+EXPORT_SYMBOL(igloo_exec_succeeded);
 
 void __weak igloo_ioctl(int error, struct file *filp, unsigned int cmd) {}
+EXPORT_SYMBOL(igloo_ioctl);
 
 bool __weak igloo_should_block_mount(struct path *path)
 {
     return false;
 }
+EXPORT_SYMBOL(igloo_should_block_mount);
 
 void __weak igloo_sock_release(struct socket *sock) { }
+EXPORT_SYMBOL(igloo_sock_release);
 
 void __weak igloo_sock_bind(struct socket *sock, struct sockaddr_storage *address) {}
+EXPORT_SYMBOL(igloo_sock_bind);
 
 void __weak igloo_hc_newuname(struct new_utsname *name) {}
+EXPORT_SYMBOL(igloo_hc_newuname);
 
 /**
  * Early params originally from igloo_hc.c in the module
@@ -58,6 +68,7 @@ static int __init early_igloo_task_size(char *p)
     return 0;
 }
 early_param("igloo_task_size", early_igloo_task_size);
+EXPORT_SYMBOL(igloo_task_size);
 
 bool igloo_do_hc = true;
 static int __init early_igloo_do_hc(char *p)
@@ -67,11 +78,12 @@ static int __init early_igloo_do_hc(char *p)
         pr_warn("Could not parse igloo_do_hc parameter %s\n", p);
         return -1;
     }
-	igloo_do_hc = (do_hc > 0);
+    igloo_do_hc = (do_hc > 0);
     pr_warn_once("Using igloo_do_hc: %d\n", igloo_do_hc);
     return 0;
 }
 early_param("igloo_do_hc", early_igloo_do_hc);
+EXPORT_SYMBOL(igloo_do_hc);
 
 bool igloo_log_cov = false;
 static int __init early_igloo_log_cov(char *p)
@@ -81,11 +93,12 @@ static int __init early_igloo_log_cov(char *p)
         pr_warn("Could not parse igloo_log_cov parameter %s\n", p);
         return -1;
     }
-	igloo_log_cov = (log_cov > 0);
+    igloo_log_cov = (log_cov > 0);
     pr_warn_once("Using igloo_log_cov: %d\n", igloo_log_cov);
     return 0;
 }
 early_param("igloo_log_cov", early_igloo_log_cov);
+EXPORT_SYMBOL(igloo_log_cov);
 
 bool igloo_block_halt=false;
 
@@ -102,6 +115,7 @@ static int __init early_igloo_block_halt(char *p)
 }
 
 early_param("igloo_block_halt", early_igloo_block_halt);
+EXPORT_SYMBOL(igloo_block_halt);
 
 // Debug logging configuration for each module
 struct igloo_debug_config {
@@ -172,5 +186,6 @@ static int __init early_igloo_debug_modules(char *p)
 }
 
 early_param("igloo_debug", early_igloo_debug_modules);
+EXPORT_SYMBOL(igloo_debug);
 
 #endif
