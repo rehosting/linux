@@ -7,7 +7,6 @@
 #include <linux/slab.h>
 #include "igloo.h"
 #include <linux/unistd.h>
-#include "vma_hc.h"
 #include "syscalls_hc.h"
 #include "osi_hc.h"
 #include "portal/portal.h"
