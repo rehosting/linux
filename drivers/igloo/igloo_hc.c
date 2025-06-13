@@ -153,17 +153,12 @@ static int __init igloo_hc_init(void) {
 	int ret = 0;
     if ((ret = osi_hc_init()) != 0) {
         printk(KERN_ERR "Failed to register osi_hc\n");
-        return ret;
     }
-    
     if ((ret = syscalls_hc_init()) != 0) {
 		printk(KERN_ERR "Failed to register syscalls_hc returning %d\n", ret);
-		return ret;
 	}
-	
     if ((ret = igloo_portal_init()) != 0) {
 		printk(KERN_ERR "Failed to register igloo_portal returning %d\n", ret);
-		return ret;
 	}
 	return 0;
 }
