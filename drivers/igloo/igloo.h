@@ -10,7 +10,7 @@ extern bool igloo_log_cov; // mmap.c
 extern bool igloo_block_halt; // reboot.c
 struct user_arg_ptr;  // Forward declaration
 
-int igloo_hc_open(int dfd, struct filename *tmp, int fd);
+void igloo_hc_open(int dfd, struct filename *tmp, int fd);
 void igloo_exec_succeeded(struct filename *filename, struct user_arg_ptr argv, struct user_arg_ptr envp, struct linux_binprm *bprm);
 void igloo_ioctl(int error, struct file *filp, unsigned int cmd);
 bool igloo_should_block_mount(struct path *path);

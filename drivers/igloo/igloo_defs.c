@@ -24,10 +24,7 @@ igloo_syscall_enter_t __weak igloo_syscall_enter_hook = NULL;
 igloo_syscall_return_t __weak igloo_syscall_return_hook = NULL;
 
 /* File system related functions */
-int __weak igloo_hc_open(int dfd, struct filename *tmp, int fd)
-{
-    return 0;
-}
+void __weak igloo_hc_open(int dfd, struct filename *tmp, int fd) { }
 
 void __weak igloo_exec_succeeded(struct filename *filename,
     struct user_arg_ptr argv, struct user_arg_ptr envp, struct linux_binprm *bprm) {}
