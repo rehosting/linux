@@ -188,4 +188,40 @@ static int __init early_igloo_debug_modules(char *p)
 early_param("igloo_debug", early_igloo_debug_modules);
 EXPORT_SYMBOL(igloo_debug);
 
-#endif
+/* Export internal symbols needed for introspection research */
+
+// Tracepoint symbols
+extern struct tracepoint __tracepoint_sched_switch;
+EXPORT_SYMBOL(__tracepoint_sched_switch);
+
+// Symbol lookup functions
+extern int kallsyms_lookup(unsigned long addr, unsigned long *symbolsize,
+                          unsigned long *offset, char **modname, char *namebuf);
+EXPORT_SYMBOL(kallsyms_lookup);
+
+// Architecture-specific functions
+extern const char *arch_vma_name(struct vm_area_struct *vma);
+EXPORT_SYMBOL(arch_vma_name);
+
+extern unsigned long arch_syscall_addr(int nr);
+EXPORT_SYMBOL(arch_syscall_addr);
+
+// Process management
+extern pid_t kernel_clone(struct kernel_clone_args *args);
+EXPORT_SYMBOL(kernel_clone);
+
+extern int kill_pid_info(int sig, struct kernel_siginfo *info, struct pid *pid);
+EXPORT_SYMBOL(kill_pid_info);
+
+// Memory access
+extern int access_remote_vm(struct mm_struct *mm, unsigned long addr,
+                           void *buf, int len, unsigned int gup_flags);
+EXPORT_SYMBOL(access_remote_vm);
+
+// Syscall metadata (linker symbols)
+extern char __start_syscalls_metadata[];
+extern char __stop_syscalls_metadata[];
+EXPORT_SYMBOL(__start_syscalls_metadata);
+EXPORT_SYMBOL(__stop_syscalls_metadata);
+
+#endif /* CONFIG_IGLOO */
