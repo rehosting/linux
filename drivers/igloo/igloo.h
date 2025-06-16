@@ -17,6 +17,7 @@ bool igloo_should_block_mount(struct path *path);
 void igloo_sock_release(struct socket *sock);
 void igloo_sock_bind(struct socket *sock, struct sockaddr_storage *address);
 void igloo_hc_newuname(struct new_utsname *name);
+unsigned long igloo_arch_syscall_addr(int nr);
 
 #include "igloo_hypercall_consts.h"
 

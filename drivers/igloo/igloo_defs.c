@@ -3,6 +3,7 @@
 #include <linux/net.h>
 #include <linux/socket.h>
 #include <linux/module.h>
+#include <linux/init.h>
 #include "syscall_macros.h"
 #include "igloo.h"
 
@@ -51,6 +52,44 @@ EXPORT_SYMBOL(igloo_sock_bind);
 
 void __weak igloo_hc_newuname(struct new_utsname *name) {}
 EXPORT_SYMBOL(igloo_hc_newuname);
+
+// arch_syscall_addr wasn't available in module, even with init
+#ifdef CONFIG_MIPS
+#ifdef CONFIG_MIPS32_N32
+extern const unsigned long sysn32_call_table[];
+#endif
+#ifdef CONFIG_MIPS32_O32
+extern const unsigned long sys32_call_table[];
+#endif
+extern unsigned long sys_ni_syscall;
+#else
+extern const unsigned long sys_call_table[];
+#endif
+
+unsigned long igloo_arch_syscall_addr(int nr) {
+    #ifdef CONFIG_MIPS
+    #ifdef CONFIG_32BIT
+    return (unsigned long)sys_call_table[nr - __NR_O32_Linux];
+    #endif
+
+    #ifdef CONFIG_64BIT
+    #ifdef CONFIG_MIPS32_N32
+    if (nr >= __NR_N32_Linux && nr < __NR_N32_Linux + __NR_N32_Linux_syscalls)
+        return (unsigned long)sysn32_call_table[nr - __NR_N32_Linux];
+    #endif
+    if (nr >= __NR_64_Linux  && nr < __NR_64_Linux + __NR_64_Linux_syscalls)
+        return (unsigned long)sys_call_table[nr - __NR_64_Linux];
+    #ifdef CONFIG_MIPS32_O32
+    if (nr >= __NR_O32_Linux && nr < __NR_O32_Linux + __NR_O32_Linux_syscalls)
+        return (unsigned long)sys32_call_table[nr - __NR_O32_Linux];
+    #endif
+
+    return (unsigned long) &sys_ni_syscall;
+    #endif
+    #endif // CONFIG_MIPS
+    return (unsigned long)sys_call_table[nr];
+}
+EXPORT_SYMBOL(igloo_arch_syscall_addr);
 
 /**
  * Early params originally from igloo_hc.c in the module
@@ -199,12 +238,16 @@ extern int kallsyms_lookup(unsigned long addr, unsigned long *symbolsize,
                           unsigned long *offset, char **modname, char *namebuf);
 EXPORT_SYMBOL(kallsyms_lookup);
 
+extern unsigned long kallsyms_lookup_name(const char *name);
+EXPORT_SYMBOL(kallsyms_lookup_name);
+
+// Syscall table
+extern const unsigned long sys_call_table[];
+EXPORT_SYMBOL(sys_call_table);
+
 // Architecture-specific functions
 extern const char *arch_vma_name(struct vm_area_struct *vma);
 EXPORT_SYMBOL(arch_vma_name);
-
-extern unsigned long arch_syscall_addr(int nr);
-EXPORT_SYMBOL(arch_syscall_addr);
 
 // Process management
 extern pid_t kernel_clone(struct kernel_clone_args *args);
