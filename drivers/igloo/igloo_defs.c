@@ -267,4 +267,8 @@ extern char __stop_syscalls_metadata[];
 EXPORT_SYMBOL(__start_syscalls_metadata);
 EXPORT_SYMBOL(__stop_syscalls_metadata);
 
+// Module management functions
+extern struct module *find_module(const char *name);
+EXPORT_SYMBOL(find_module);
+
 #endif /* CONFIG_IGLOO */
