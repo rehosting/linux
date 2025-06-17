@@ -14,6 +14,85 @@
 
 #define HYPERFS_DEBUG 0
 
+int hyperfs_init(void);
+void hyperfs_exit(void);
+
+// Function pointer types for runtime symbol lookup
+extern unsigned long kallsyms_lookup_name(const char *name);
+typedef int (*igloo_portal_t)(unsigned long num, unsigned long arg1, unsigned long arg2);
+typedef void (*igloo_enoent_t)(struct dentry *dentry);
+typedef void (*igloo_enoent_path_t)(const char *path);
+typedef void (*igloo_ioctl_t)(int error, struct file *filp, unsigned int cmd);
+
+// Global function pointers (resolved at runtime)
+static igloo_portal_t igloo_portal_func = NULL;
+static igloo_enoent_t igloo_enoent_func = NULL;
+static igloo_enoent_path_t igloo_enoent_path_func = NULL;
+static igloo_ioctl_t igloo_ioctl_func = NULL;
+
+// Helper function to resolve igloo symbols
+static int hyperfs_resolve_igloo_symbols(void)
+{
+    // Look up symbols at runtime
+    igloo_portal_func = (igloo_portal_t)kallsyms_lookup_name("igloo_portal");
+    igloo_enoent_func = (igloo_enoent_t)kallsyms_lookup_name("igloo_enoent");
+    igloo_enoent_path_func = (igloo_enoent_path_t)kallsyms_lookup_name("igloo_enoent_path");
+    igloo_ioctl_func = (igloo_ioctl_t)kallsyms_lookup_name("igloo_ioctl");
+
+    if (!igloo_portal_func) {
+        pr_err("hyperfs: Required symbol 'igloo_portal' not found\n");
+        return -ENODEV;
+    }
+
+    // The other symbols are optional - we'll check for NULL before calling them
+    if (!igloo_enoent_func)
+        pr_info("hyperfs: Optional symbol 'igloo_enoent' not found\n");
+    if (!igloo_enoent_path_func)
+        pr_info("hyperfs: Optional symbol 'igloo_enoent_path' not found\n");
+    if (!igloo_ioctl_func)
+        pr_info("hyperfs: Optional symbol 'igloo_ioctl' not found\n");
+
+    pr_info("hyperfs: igloo symbols resolved successfully\n");
+    return 0;
+}
+
+// Wrapper functions that check for NULL before calling
+// Use different names to avoid conflicts with igloo.h declarations
+static inline int hyperfs_igloo_portal(unsigned long num, unsigned long arg1, unsigned long arg2)
+{
+    if (igloo_portal_func)
+        return igloo_portal_func(num, arg1, arg2);
+    pr_err("hyperfs: igloo_portal not available\n");
+    return -ENODEV;
+}
+
+static inline void hyperfs_igloo_enoent(struct dentry *dentry)
+{
+    if (igloo_enoent_func)
+        igloo_enoent_func(dentry);
+    // Silently ignore if not available
+}
+
+static inline void hyperfs_igloo_enoent_path(const char *path)
+{
+    if (igloo_enoent_path_func)
+        igloo_enoent_path_func(path);
+    // Silently ignore if not available
+}
+
+static inline void hyperfs_igloo_ioctl(int error, struct file *filp, unsigned int cmd)
+{
+    if (igloo_ioctl_func)
+        igloo_ioctl_func(error, filp, cmd);
+    // Silently ignore if not available
+}
+
+// Define macros for easy replacement throughout the file
+#define igloo_portal hyperfs_igloo_portal
+#define igloo_enoent hyperfs_igloo_enoent
+#define igloo_enoent_path hyperfs_igloo_enoent_path
+#define igloo_ioctl hyperfs_igloo_ioctl
+
 struct hyperfs_tree {
 	bool is_dir;
 	struct inode *inode;
@@ -587,7 +666,7 @@ static ssize_t hyperfs_read(struct file *file, char __user *buf, size_t size,
 		// Process the read in chunks of at most 128 bytes
 		while (size > 0) {
 			chunk_size = min(size, sizeof(kbuf));
-			
+
 			ret = hyp_file_op((struct hyperfs_data){
 				.type = HYP_READ,
 				.path = tree->path,
@@ -595,10 +674,10 @@ static ssize_t hyperfs_read(struct file *file, char __user *buf, size_t size,
 				.read.size = chunk_size,
 				.read.offset = *offset,
 			});
-			
+
 			if (ret <= 0)
 				break;
-				
+
 			// Safety check to prevent buffer overflow
 			if (ret > sizeof(kbuf)) {
 				printk(KERN_ERR "hyperfs: hypercall returned more data (%zd) than buffer size (%zu)",
@@ -606,21 +685,21 @@ static ssize_t hyperfs_read(struct file *file, char __user *buf, size_t size,
 				ret = -EINVAL;
 				break;
 			}
-			
+
 			if (copy_to_user(buf + bytes_read, kbuf, ret)) {
 				ret = -EFAULT;
 				break;
 			}
-			
+
 			*offset += ret;
 			bytes_read += ret;
 			size -= ret;
-			
+
 			// If we got less than requested, we've hit EOF
 			if (ret < chunk_size)
 				break;
 		}
-		
+
 		return bytes_read > 0 ? bytes_read : ret;
 	} else if (real_file) {
 		ret = vfs_read(real_file, buf, size, offset);
@@ -652,10 +731,10 @@ static ssize_t hyperfs_write(struct file *file, const char __user *buf,
 		// Process the write in chunks of at most 128 bytes
 		while (size > 0) {
 			chunk_size = min(size, sizeof(kbuf));
-			
+
 			if (copy_from_user(kbuf, buf + bytes_written, chunk_size))
 				return bytes_written > 0 ? bytes_written : -EFAULT;
-				
+
 			ret = hyp_file_op((struct hyperfs_data){
 				.type = HYP_WRITE,
 				.path = tree->path,
@@ -663,19 +742,19 @@ static ssize_t hyperfs_write(struct file *file, const char __user *buf,
 				.write.size = chunk_size,
 				.write.offset = *offset,
 			});
-			
+
 			if (ret <= 0)
 				break;
-				
+
 			*offset += ret;
 			bytes_written += ret;
 			size -= ret;
-			
+
 			// If we wrote less than requested, we can't write more
 			if (ret < chunk_size)
 				break;
 		}
-		
+
 		return bytes_written > 0 ? bytes_written : ret;
 	} else if (real_file) {
 		ret = vfs_write(real_file, buf, size, offset);
@@ -730,7 +809,7 @@ static struct dentry *hyperfs_get_real_dentry(struct dentry *dentry)
 
 	// Get a reference to the parent dentry before releasing the path
 	real_parent = dget(real_parent_path.dentry);
-	
+
 	// Release the path before taking the inode lock
 	path_put(&real_parent_path);
 
@@ -739,7 +818,7 @@ static struct dentry *hyperfs_get_real_dentry(struct dentry *dentry)
 	ret = lookup_one_len(dentry->d_name.name, real_parent,
 			     dentry->d_name.len);
 	inode_unlock(real_parent->d_inode);
-	
+
 	// Release our reference to the parent
 	dput(real_parent);
 
@@ -835,7 +914,7 @@ static int hyperfs_unlink(struct inode *dir, struct dentry *dentry)
 	return err;
 }
 
-static int hyperfs_symlink(struct mnt_idmap *idmap, struct inode *dir, 
+static int hyperfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 			struct dentry *dentry, const char *link)
 {
 	struct dentry *real_dentry;
@@ -851,7 +930,7 @@ static int hyperfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	return err;
 }
 
-static int hyperfs_mkdir(struct mnt_idmap *idmap, struct inode *dir, 
+static int hyperfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 						struct dentry *dentry, umode_t mode)
 {
 	struct dentry *real_dentry;
@@ -886,7 +965,7 @@ static int hyperfs_rmdir(struct inode *dir, struct dentry *dentry)
 	return err;
 }
 
-static int hyperfs_mknod(struct mnt_idmap *idmap, struct inode *dir, 
+static int hyperfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 			struct dentry *dentry, umode_t mode, dev_t rdev)
 {
 	struct dentry *real_dentry;
@@ -905,7 +984,7 @@ static int hyperfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	return err;
 }
 
-static int hyperfs_rename(struct mnt_idmap *idmap, struct inode *old_dir, 
+static int hyperfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 			  struct dentry *old, struct inode *new_dir, struct dentry *new,
 			  unsigned int flags)
 {
@@ -989,7 +1068,7 @@ static int hyperfs_getattr(struct mnt_idmap *idmap, const struct path *path,
 		}
 		return err;
 	}
-	
+
 	/* Get attributes from real path */
 	err = vfs_getattr(&real_path, stat, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
 	path_put(&real_path);
@@ -1257,7 +1336,7 @@ static struct inode *hyperfs_wrap_real_inode(struct super_block *sb,
 	inode->i_mtime_nsec = real->i_mtime_nsec;
 	inode->i_ctime_sec = real->i_ctime_sec;
 	inode->i_ctime_nsec = real->i_ctime_nsec;
-	
+
 	i_size_write(inode, i_size_read(real));
 	switch (real->i_mode & S_IFMT) {
 	case S_IFDIR:
@@ -1464,15 +1543,31 @@ static struct file_system_type hyperfs_fs_type = {
 	.kill_sb = kill_anon_super,
 };
 
-static int hyperfs_init(void)
-{
-	return register_filesystem(&hyperfs_fs_type);
-}
+MODULE_SOFTDEP("pre: igloo");
 
-static void hyperfs_exit(void)
+int hyperfs_init(void)
+{
+    int ret;
+
+    // Resolve igloo symbols at runtime
+    ret = hyperfs_resolve_igloo_symbols();
+    if (ret) {
+        pr_err("hyperfs: Failed to resolve igloo symbols: %d\n", ret);
+        return ret;
+    }
+
+    pr_info("hyperfs: loading (igloo symbols resolved)\n");
+    return register_filesystem(&hyperfs_fs_type);
+}
+EXPORT_SYMBOL(hyperfs_init);
+
+void hyperfs_exit(void)
 {
 	unregister_filesystem(&hyperfs_fs_type);
-}
 
-module_init(hyperfs_init);
-module_exit(hyperfs_exit);
+    // Clear function pointers
+    igloo_portal_func = NULL;
+    igloo_enoent_func = NULL;
+    igloo_enoent_path_func = NULL;
+    igloo_ioctl_func = NULL;
+}
