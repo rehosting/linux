@@ -69,31 +69,6 @@ static bool handle_post_memregion(portal_region *mem_region){
     return true;
 }
 
-/*
-* bool -> should we stop the hypercall loop?
-*/
-static bool handle_post_memregions(struct cpu_mem_regions *regions){
-	int count = regions->hdr.count;  // Use hdr.count instead of count
-	int i = 0;
-	bool any_responses = false;
-	for (i = 0; i < count; i++) {
-		portal_region *mem_region =
-			(portal_region *)(unsigned long)(
-				regions->regions[i].mem_region);
-		if (!mem_region) {
-			igloo_pr_debug(
-			       "igloo: No mem_region found for CPU %d\n",
-			       smp_processor_id());
-			continue;
-		}
-		bool responded = handle_post_memregion(mem_region);
-        if (responded){
-            any_responses = true;
-        }
-	}
-    return any_responses;
-}
-
 void check_portal_interrupt(void){
     if (unlikely(portal_interrupt != 0)) {
         // Clear the interrupt flag
@@ -112,9 +87,6 @@ int igloo_portal(unsigned long num, unsigned long arg1, unsigned long arg2)
         return -ENOMEM;
     }
     
-    region->header.call_num = this_cpu_inc_return(hypercall_num);
-    igloo_pr_debug("igloo-call: portal call: call_num=%d\n", region->header.call_num);
-
     if (num != IGLOO_HYPER_PORTAL_INTERRUPT){
         check_portal_interrupt();
     }
