@@ -146,9 +146,6 @@ static void fill_handler(struct syscall_event *args, int argc, const unsigned lo
     }
 }
 
-// Global atomic counter for syscall sequence numbers
-static atomic64_t syscall_sequence_counter = ATOMIC64_INIT(0);
-
 static void do_hyp(bool is_enter, struct syscall_event* args) {
     // Add the hook_id and metadata to the call so the hypervisor knows which hook was triggered
     // and has access to syscall metadata - pass the hook_id as third argument
