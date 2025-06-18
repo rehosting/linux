@@ -4,6 +4,9 @@
 #include <linux/socket.h>
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/syscalls.h>
+#include <asm/unistd.h>
+#include <asm/syscall.h>
 #include "syscall_macros.h"
 #include "igloo.h"
 
@@ -233,9 +236,7 @@ EXPORT_SYMBOL(igloo_debug);
 extern struct tracepoint __tracepoint_sched_switch;
 EXPORT_SYMBOL(__tracepoint_sched_switch);
 
-// Symbol lookup functions
-extern int kallsyms_lookup(unsigned long addr, unsigned long *symbolsize,
-                          unsigned long *offset, char **modname, char *namebuf);
+// Symbol lookup functions - now pulled in by trace/syscall.h
 EXPORT_SYMBOL(kallsyms_lookup);
 
 extern unsigned long kallsyms_lookup_name(const char *name);
@@ -261,14 +262,160 @@ extern int access_remote_vm(struct mm_struct *mm, unsigned long addr,
                            void *buf, int len, unsigned int gup_flags);
 EXPORT_SYMBOL(access_remote_vm);
 
+// We do this instead of modifying trace_syscalls.c
 // Syscall metadata (linker symbols)
-extern char __start_syscalls_metadata[];
-extern char __stop_syscalls_metadata[];
-EXPORT_SYMBOL(__start_syscalls_metadata);
-EXPORT_SYMBOL(__stop_syscalls_metadata);
+extern struct syscall_metadata *__start_syscalls_metadata[];
+extern struct syscall_metadata *__stop_syscalls_metadata[];
+struct syscall_metadata *igloo_get_syscall_metadata(int nr)
+{
 
-// Module management functions
-extern struct module *find_module(const char *name);
-EXPORT_SYMBOL(find_module);
+    struct syscall_metadata **start = __start_syscalls_metadata;
+    struct syscall_metadata **stop = __stop_syscalls_metadata;
+    struct syscall_metadata **p;
 
-#endif /* CONFIG_IGLOO */
+    // If we have no metadata, return NULL
+    if (start >= stop)
+        return NULL;
+
+    for (p = start; p < stop; p++) {
+        struct syscall_metadata *meta = *p;
+        if (meta && meta->syscall_nr == nr) {
+            return meta;
+        }
+    }
+
+    return NULL;
+}
+EXPORT_SYMBOL(igloo_get_syscall_metadata);
+
+// Function to get the total number of syscalls
+int igloo_get_nr_syscalls(void)
+{
+    return NR_syscalls;
+}
+EXPORT_SYMBOL(igloo_get_nr_syscalls);
+
+// Function to iterate through all syscall metadata
+struct syscall_metadata *igloo_get_syscall_metadata_by_index(int index)
+{
+    struct syscall_metadata **start = __start_syscalls_metadata;
+    struct syscall_metadata **stop = __stop_syscalls_metadata;
+
+    if (index < 0 || start + index >= stop)
+        return NULL;
+
+    return start[index];
+}
+EXPORT_SYMBOL(igloo_get_syscall_metadata_by_index);
+
+// Function to get count of metadata entries
+int igloo_get_syscall_metadata_count(void)
+{
+    struct syscall_metadata **start = __start_syscalls_metadata;
+    struct syscall_metadata **stop = __stop_syscalls_metadata;
+
+    return (int)(stop - start);
+}
+EXPORT_SYMBOL(igloo_get_syscall_metadata_count);
+
+// Our own copy of the syscall metadata table
+// The __start_syscalls_metadata and __stop_syscalls_metadata symbols were not available after kernel init
+// So we can't use them directly in a module, simplest solution I had was to copy the metadata at boot time
+static struct syscall_metadata **igloo_syscalls_metadata = NULL;
+static int igloo_syscalls_metadata_count = 0;
+static bool igloo_metadata_copied = false;
+
+/* Function to copy the kernel's metadata table into our own storage */
+static int igloo_copy_syscall_metadata(void)  // Remove __init
+{
+    struct syscall_metadata **start = __start_syscalls_metadata;
+    struct syscall_metadata **stop = __stop_syscalls_metadata;
+    int count = (int)(stop - start);
+    int i;
+
+    if (count <= 0) {
+        pr_warn("IGLOO: No kernel syscall metadata found to copy\n");
+        return 0;
+    }
+
+    igloo_syscalls_metadata = kzalloc(count * sizeof(struct syscall_metadata *), GFP_KERNEL);
+    if (!igloo_syscalls_metadata) {
+        pr_err("IGLOO: Failed to allocate memory for syscall metadata copy\n");
+        return -ENOMEM;
+    }
+
+    for (i = 0; i < count; i++) {
+        igloo_syscalls_metadata[i] = start[i];
+    }
+
+    igloo_syscalls_metadata_count = count;
+    igloo_metadata_copied = true;
+
+    pr_info("IGLOO: Copied %d syscall metadata entries from kernel\n", count);
+
+    return 0;
+}
+
+// We need to do this copy at boot time.
+static int __init igloo_metadata_init(void)
+{
+    return igloo_copy_syscall_metadata();
+}
+
+// Register it to be called during kernel initialization, but after tracing stuff starts
+late_initcall(igloo_metadata_init);
+
+static void igloo_free_syscall_metadata_copy(void)
+{
+    if (igloo_syscalls_metadata) {
+        kfree(igloo_syscalls_metadata);
+        igloo_syscalls_metadata = NULL;
+        igloo_syscalls_metadata_count = 0;
+        igloo_metadata_copied = false;
+    }
+}
+
+// Register cleanup function - probably won't ever be used?
+static void __exit igloo_metadata_cleanup(void)
+{
+    igloo_free_syscall_metadata_copy();
+}
+
+/* The AI wanted to maintain the version that doesn't use a copy as fallback */
+struct syscall_metadata *igloo_get_syscall_metadata_copy(int nr)
+{
+    int i;
+
+    /* If we don't have metadata, fall back to original function */
+    if (!igloo_syscalls_metadata || igloo_syscalls_metadata_count == 0) {
+        return igloo_get_syscall_metadata(nr);
+    }
+
+    /* Search through our copy */
+    for (i = 0; i < igloo_syscalls_metadata_count; i++) {
+        struct syscall_metadata *meta = igloo_syscalls_metadata[i];
+        if (meta && meta->syscall_nr == nr) {
+            return meta;
+        }
+    }
+
+    return NULL;
+}
+EXPORT_SYMBOL(igloo_get_syscall_metadata_copy);
+
+int igloo_get_syscall_metadata_count_copy(void)
+{
+    return igloo_syscalls_metadata_count;
+}
+EXPORT_SYMBOL(igloo_get_syscall_metadata_count_copy);
+
+struct syscall_metadata *igloo_get_syscall_metadata_by_index_copy(int index)
+{
+    if (!igloo_syscalls_metadata || index < 0 || index >= igloo_syscalls_metadata_count) {
+        return NULL;
+    }
+
+    return igloo_syscalls_metadata[index];
+}
+EXPORT_SYMBOL(igloo_get_syscall_metadata_by_index_copy);
+#endif
