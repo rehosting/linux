@@ -2,10 +2,6 @@
 #include <linux/wait.h>
 #include <linux/sched.h>
 
-long do_snapshot_and_coredump(void);
-
-static DEFINE_PER_CPU(uint32_t, hypercall_num);
-
 uint64_t portal_interrupt = 0;
 
 // Operation handler table

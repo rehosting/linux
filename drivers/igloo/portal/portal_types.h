@@ -58,9 +58,9 @@ enum portal_type {
 
 typedef struct {
     uint32_t op;          // operation type
-    uint64_t addr;        // address
-    uint32_t size;        // size
     uint32_t pid;         // process ID (if relevant)
+    uint64_t addr;        // address
+    uint64_t size;        // size
 } region_header;
 
 typedef union {
