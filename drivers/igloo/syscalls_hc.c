@@ -150,13 +150,10 @@ static void fill_handler(struct syscall_event *args, int argc, const unsigned lo
 static atomic64_t syscall_sequence_counter = ATOMIC64_INIT(0);
 
 static void do_hyp(bool is_enter, struct syscall_event* args) {
-    // Set the sequence number atomically
-    uint64_t sequence = atomic64_inc_return(&syscall_sequence_counter);
-    
     // Add the hook_id and metadata to the call so the hypervisor knows which hook was triggered
     // and has access to syscall metadata - pass the hook_id as third argument
     igloo_portal(is_enter ? IGLOO_HYP_SYSCALL_ENTER : IGLOO_HYP_SYSCALL_RETURN,
-                sequence, (unsigned long)args);
+                (unsigned long)args, 0);
 }
 
 /* Check if a value matches a filter */
