@@ -77,18 +77,27 @@ void check_portal_interrupt(void){
 
 int igloo_portal(unsigned long num, unsigned long arg1, unsigned long arg2)
 {
-    unsigned long ret;
-    portal_region *region = (portal_region *)get_zeroed_page(GFP_ATOMIC);
+    igloo_pr_debug("IGLOO: igloo_portal entry num=%lu arg1=%lx arg2=%lx\n", num, arg1, arg2);
+    unsigned long ret, page;
+    portal_region *region;
+    
+    if (num != IGLOO_HYPER_PORTAL_INTERRUPT){
+        check_portal_interrupt();
+    }
+
+    page = __get_free_page(GFP_KERNEL);
+    region = (portal_region *)page;
+
+    // Debug: log allocation
+    igloo_pr_debug("igloo: Allocated portal_region at %p in igloo_portal\n", region);
 
     // Check if memory allocation failed
     if (!region) {
         pr_err("igloo: Failed to allocate memory for portal region\n");
         return -ENOMEM;
     }
-    
-    if (num != IGLOO_HYPER_PORTAL_INTERRUPT){
-        check_portal_interrupt();
-    }
+    // Zero only the region_header
+    memset(&region->header, 0, sizeof(region_header));
 
     for (;;) {
         // Make the hypercall to get the next operation from the hypervisor
@@ -100,9 +109,11 @@ int igloo_portal(unsigned long num, unsigned long arg1, unsigned long arg2)
     }
 
     igloo_pr_debug("portal call exit: ret=%lu\n", ret);
+    igloo_pr_debug("IGLOO: igloo_portal exit ret=%lu\n", ret);
 
     // Free the allocated memory before returning
-    free_page((unsigned long)region);
+    igloo_pr_debug("igloo: Freeing portal_region at %p in igloo_portal\n", region);
+    free_page(page);
 
     return ret;
 }
