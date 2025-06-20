@@ -1,3 +1,5 @@
+#include <linux/gfp.h>
+#include <linux/mm.h>
 #include "portal_internal.h"
 #include <linux/wait.h>
 #include <linux/sched.h>
@@ -9,6 +11,7 @@ static const portal_op_handler op_handlers[] = {
     [HYPER_OP_READ]            = handle_op_read,
     [HYPER_OP_WRITE]           = handle_op_write,
     [HYPER_OP_READ_STR]        = handle_op_read_str,
+    [HYPER_OP_READ_PTR_ARRAY]   = handle_op_read_ptr_array,
     [HYPER_OP_DUMP]            = handle_op_dump,
     [HYPER_OP_EXEC]            = handle_op_exec,
     [HYPER_OP_OSI_PROC]        = handle_op_osi_proc,
@@ -76,7 +79,7 @@ int igloo_portal(unsigned long num, unsigned long arg1, unsigned long arg2)
 {
     unsigned long ret;
     portal_region *region = (portal_region *)get_zeroed_page(GFP_ATOMIC);
-    
+
     // Check if memory allocation failed
     if (!region) {
         pr_err("igloo: Failed to allocate memory for portal region\n");
@@ -97,10 +100,10 @@ int igloo_portal(unsigned long num, unsigned long arg1, unsigned long arg2)
     }
 
     igloo_pr_debug("portal call exit: ret=%lu\n", ret);
-    
+
     // Free the allocated memory before returning
     free_page((unsigned long)region);
-    
+
     return ret;
 }
 

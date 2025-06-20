@@ -5,6 +5,7 @@ enum HYPER_OP {
     HYPER_OP_READ,
     HYPER_OP_WRITE,
     HYPER_OP_READ_STR,
+    HYPER_OP_READ_PTR_ARRAY,  // Read array of pointers to null-terminated strings
     
     // dump operation
     HYPER_OP_DUMP,
