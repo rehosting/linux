@@ -1,3 +1,5 @@
+#define DBG_PRINTK(fmt, ...) do {} while (0)
+
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -139,11 +141,58 @@ static void fill_handler(struct syscall_event *args, int argc, const unsigned lo
     }
 }
 
-static void do_hyp(bool is_enter, struct syscall_event* args) {
-    // Add the hook_id and metadata to the call so the hypervisor knows which hook was triggered
-    // and has access to syscall metadata - pass the hook_id as third argument
-    igloo_portal(is_enter ? IGLOO_HYP_SYSCALL_ENTER : IGLOO_HYP_SYSCALL_RETURN,
+static bool process_single_syscall_hook(
+    const char *syscall_name,
+    struct kernel_syscall_hook *matched_hook,
+    int argc,
+    const unsigned long args[],
+    bool is_entry,
+    igloo_syscall_setter_t setter_func,
+    long *skip_ret_val_or_retval,
+    long *modified_ret,
+    long orig_ret)
+{
+    struct syscall_event syscall_args_holder, original_info;
+    fill_handler(&syscall_args_holder, argc, args, &matched_hook->hook, syscall_name);
+    if (!is_entry) {
+        syscall_args_holder.retval = *modified_ret;
+    }
+    if (is_entry) {
+        memcpy(&original_info, &syscall_args_holder, sizeof(struct syscall_event));
+    }
+    DBG_PRINTK("IGLOO: Syscall %s %s matched hook at %p%s\n",
+              syscall_name, is_entry ? "entry" : "return", matched_hook,
+              is_entry ? "" : " with retval");
+    igloo_portal(is_entry ? IGLOO_HYP_SYSCALL_ENTER : IGLOO_HYP_SYSCALL_RETURN,
                 (unsigned long)args, 0);
+    if (is_entry) {
+        bool was_modified = false;
+        for (int i = 0; i < IGLOO_SYSCALL_MAXARGS && i < argc; i++) {
+            if (syscall_args_holder.args[i] != original_info.args[i]) {
+                DBG_PRINTK("Hypercall modified arg[%d]: old=0x%llx, new=0x%llx\n",
+                          i, (unsigned long long)original_info.args[i], (unsigned long long)syscall_args_holder.args[i]);
+                was_modified = true;
+                break;
+            }
+        }
+        if (was_modified && setter_func && args) {
+            setter_func(args, (const __le64 *)&syscall_args_holder.args[0]);
+        }
+        if (syscall_args_holder.skip_syscall) {
+            *skip_ret_val_or_retval = syscall_args_holder.retval;
+            DBG_PRINTK("IGLOO: Hook %p requested to skip syscall %s with return value %llx\n",
+                      matched_hook, syscall_name, (unsigned long long)syscall_args_holder.retval);
+            return true;
+        }
+    } else {
+        long new_ret = syscall_args_holder.retval;
+        if (new_ret != *modified_ret) {
+            DBG_PRINTK("Hypercall modified return value: old=%lld, new=%lld\n",
+                      (long long)*modified_ret, (long long)new_ret);
+            *modified_ret = new_ret;
+        }
+    }
+    return false;
 }
 
 /* Check if a value matches a filter */
