@@ -275,12 +275,15 @@ static int hyperfs_tree_add_hyperfile(struct super_block *sb,
 	entry->name = kstrdup(basename, GFP_KERNEL);
 	if (!entry->name) {
 		err = -ENOMEM;
+		kfree(entry);
 		goto out;
 	}
 
 	entry->tree = kzalloc(sizeof(struct hyperfs_tree), GFP_KERNEL);
 	if (!entry->tree) {
 		err = -ENOMEM;
+		kfree(entry->name);
+		kfree(entry);
 		goto out;
 	}
 
@@ -290,6 +293,9 @@ static int hyperfs_tree_add_hyperfile(struct super_block *sb,
 	entry->tree->inode = hyperfs_new_inode(sb, entry->tree);
 	if (!entry->tree->inode) {
 		err = -ENOMEM;
+		kfree(entry->tree);
+		kfree(entry->name);
+		kfree(entry);
 		goto out;
 	}
 
