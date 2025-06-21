@@ -75,29 +75,18 @@ struct kernel_syscall_hook {
     struct hlist_node hlist;      /* For tracking in main hash table */
     struct hlist_node name_hlist; /* For tracking in name-based hash table */
     bool in_use;                  /* Whether this slot is used */
+    struct rcu_head rcu;          /* For RCU freeing */
 };
 
 /* Global variables - defined in syscalls_hc.c */
 extern struct hlist_head syscall_hook_table[1024];
 extern spinlock_t syscall_hook_lock;
 
-/* Check if a syscall matches a hook's criteria */
-bool hook_matches_syscall(struct syscall_hook *hook, const char *syscall_name, 
-                         int argc, const unsigned long args[]);
-
-/* Check if a syscall return value matches a hook's criteria */
-bool hook_matches_syscall_return(struct syscall_hook *hook, const char *syscall_name, 
-                                 int argc, const unsigned long args[], long retval);
-
-/* Registration is now handled by portal_syscall.c */
 
 /* Unregister a syscall hook using its pointer */
 int unregister_syscall_hook(struct kernel_syscall_hook *hook_ptr);
 
 int syscalls_hc_init(void);
-
-/* Check if a value matches a filter */
-bool value_matches_filter(long value, const struct value_filter *filter);
 
 /* Normalize syscall names by removing common prefixes like 'sys_', '_sys_', 'compat_sys_' */
 static inline const char *normalize_syscall_name(const char *name)

@@ -40,16 +40,16 @@ void handle_op_register_syscall_hook(portal_region *mem_region)
     
     // Add to the main hook table indexed by pointer address
     spin_lock(&syscall_hook_lock);
-    hash_add(syscall_hook_table, &kernel_hook->hlist, (unsigned long)kernel_hook);
+    hash_add_rcu(syscall_hook_table, &kernel_hook->hlist, (unsigned long)kernel_hook);
     
     // Also add to name-based hash table for faster lookups
     if (kernel_hook->hook.on_all) {
         // Special case for hooks that want all syscalls
-        hlist_add_head(&kernel_hook->name_hlist, &syscall_all_hooks);
+        hlist_add_head_rcu(&kernel_hook->name_hlist, &syscall_all_hooks);
     } else if (kernel_hook->hook.name[0] != '\0') {
         // Add to hash table based on syscall name
         u32 name_hash = syscall_name_hash(kernel_hook->hook.name);
-        hash_add(syscall_name_table, &kernel_hook->name_hlist, name_hash);
+        hash_add_rcu(syscall_name_table, &kernel_hook->name_hlist, name_hash);
     }
     
     spin_unlock(&syscall_hook_lock);
