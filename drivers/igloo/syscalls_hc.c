@@ -175,74 +175,55 @@ static inline bool value_matches_filter(long value, const struct value_filter *f
     }
 }
 
-// Check if a syscall matches a hook's criteria
-static inline bool hook_matches_syscall(struct syscall_hook *hook, const char *syscall_name, 
+// Change hook_matches_syscall and hook_matches_syscall_return to take struct kernel_syscall_hook *
+static inline bool hook_matches_syscall(struct kernel_syscall_hook *hook, const char *syscall_name, 
                          int argc, const unsigned long args[])
 {
-    // If hook is disabled, it doesn't match
-    if (!hook->enabled){
+    if (!hook->hook.enabled){
         return false;
     }
-    
-    // Check if we should match all syscalls
-    if (hook->on_all){
+    if (hook->hook.on_all){
         return true;
     }
-    
-    // Check if we need to match syscall name
-    if (syscall_name && hook->name[0] != '\0') {
+    if (syscall_name && hook->hook.name[0] != '\0') {
         const char *normalized_syscall = normalize_syscall_name(syscall_name);
         if (strcmp(hook->normalized_name, normalized_syscall) != 0) {
             return false;
         }
-    } else if (hook->name[0] != '\0') {
-        // Hook wants a specific syscall but we don't have a name
+    } else if (hook->hook.name[0] != '\0') {
         return false;
     }
-    
-    // If comm_filter is enabled, check process name
-    if (hook->comm_filter_enabled) {
-        if (strncmp(current->comm, hook->comm_filter, TASK_COMM_LEN) != 0){
+    if (hook->hook.comm_filter_enabled) {
+        if (strncmp(current->comm, hook->hook.comm_filter, TASK_COMM_LEN) != 0){
             return false;
         }
     }
-    
-    // If PID filter is enabled, check the current process ID
-    if (hook->pid_filter_enabled) {
-        if (task_pid_nr(current) != hook->filter_pid){
+    if (hook->hook.pid_filter_enabled) {
+        if (task_pid_nr(current) != hook->hook.filter_pid){
             return false;
         }
     }
-    
-    // Check argument filters with complex comparisons
     for (int i = 0; i < IGLOO_SYSCALL_MAXARGS && i < argc; i++) {
-        if (hook->arg_filters[i].enabled) {
+        if (hook->hook.arg_filters[i].enabled) {
             unsigned long arg_ptr = args[i];
             long arg_val = *(long *)arg_ptr;
-            if (!value_matches_filter(arg_val, &hook->arg_filters[i])) {
+            if (!value_matches_filter(arg_val, &hook->hook.arg_filters[i])) {
                 return false;
             }
         }
     }
-    
-    // All criteria matched
     return true;
 }
 
-// Function to check if a syscall return value matches a hook's criteria
-static inline bool hook_matches_syscall_return(struct syscall_hook *hook, const char *syscall_name, 
+static inline bool hook_matches_syscall_return(struct kernel_syscall_hook *hook, const char *syscall_name, 
                                  int argc, const unsigned long args[], long retval)
 {
-    // First check all the regular criteria
     if (!hook_matches_syscall(hook, syscall_name, argc, args)) {
         return false;
     }
-    
-    // Check return value filter with complex comparisons
-    if (!value_matches_filter(retval, &hook->retval_filter)) {
+    if (!value_matches_filter(retval, &hook->hook.retval_filter)) {
         return false;
     }
-    
     return true;
 }
 
@@ -268,9 +249,9 @@ static long process_syscall_hooks(
         hlist_for_each_entry_rcu(hook, &syscall_all_hooks, name_hlist) {
             bool matches = false;
             if (is_entry) {
-                matches = hook->hook.on_enter && hook_matches_syscall(&hook->hook, syscall_name, argc, args);
+                matches = hook->hook.on_enter && hook_matches_syscall(hook, syscall_name, argc, args);
             } else {
-                matches = hook->hook.on_return && hook_matches_syscall_return(&hook->hook, syscall_name, argc, args, modified_ret);
+                matches = hook->hook.on_return && hook_matches_syscall_return(hook, syscall_name, argc, args, modified_ret);
             }
             if (matches) {
                 memcpy(&syscall_args_holder, &original_info, sizeof(struct syscall_event));
@@ -311,9 +292,9 @@ static long process_syscall_hooks(
         hash_for_each_possible_rcu(syscall_name_table, hook, name_hlist, name_hash) {
             bool matches = false;
             if (is_entry) {
-                matches = hook->hook.on_enter && hook_matches_syscall(&hook->hook, syscall_name, argc, args);
+                matches = hook->hook.on_enter && hook_matches_syscall(hook, syscall_name, argc, args);
             } else {
-                matches = hook->hook.on_return && hook_matches_syscall_return(&hook->hook, syscall_name, argc, args, modified_ret);
+                matches = hook->hook.on_return && hook_matches_syscall_return(hook, syscall_name, argc, args, modified_ret);
             }
             if (matches) {
                 memcpy(&syscall_args_holder, &original_info, sizeof(struct syscall_event));
