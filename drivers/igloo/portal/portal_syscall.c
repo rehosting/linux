@@ -37,6 +37,15 @@ void handle_op_register_syscall_hook(portal_region *mem_region)
     // Copy the hook configuration
     memcpy(&kernel_hook->hook, hook, sizeof(struct syscall_hook));
     kernel_hook->in_use = true;
+    // Cache the normalized syscall name for fast matching
+    if (kernel_hook->hook.name[0] != '\0') {
+        strncpy(kernel_hook->normalized_name,
+                normalize_syscall_name(kernel_hook->hook.name),
+                SYSCALL_NAME_MAX_LEN - 1);
+        kernel_hook->normalized_name[SYSCALL_NAME_MAX_LEN - 1] = '\0';
+    } else {
+        kernel_hook->normalized_name[0] = '\0';
+    }
     
     // Add to the main hook table indexed by pointer address
     spin_lock(&syscall_hook_lock);

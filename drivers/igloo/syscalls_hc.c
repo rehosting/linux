@@ -191,10 +191,8 @@ static inline bool hook_matches_syscall(struct syscall_hook *hook, const char *s
     
     // Check if we need to match syscall name
     if (syscall_name && hook->name[0] != '\0') {
-        const char *normalized_hook = normalize_syscall_name(hook->name);
         const char *normalized_syscall = normalize_syscall_name(syscall_name);
-        
-        if (strcmp(normalized_hook, normalized_syscall) != 0) {
+        if (strcmp(hook->normalized_name, normalized_syscall) != 0) {
             return false;
         }
     } else if (hook->name[0] != '\0') {
