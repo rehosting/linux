@@ -199,20 +199,70 @@ static inline bool hook_matches_syscall(struct kernel_syscall_hook *hook, const 
             return false;
         }
     }
-    for (int i = 0; i < IGLOO_SYSCALL_MAXARGS && i < argc; i++) {
-        struct value_filter *f = &hook->hook.arg_filters[i];
-        if (!f->enabled){
-		    continue;
-	    }
-        unsigned long arg_ptr = args[i];
-        long arg_val = *(long *)arg_ptr;
-        if (f->type == SYSCALLS_HC_FILTER_EXACT){
-            if (arg_val != f->value){
-		    return false;
-	    }
-	    }else{
-            if (!value_matches_filter(arg_val, f)) {
-                return false;
+    // Unrolled argument filter checks for IGLOO_SYSCALL_MAXARGS == 6
+    if (argc > 0) {
+        struct value_filter *f = &hook->hook.arg_filters[0];
+        if (f->enabled) {
+            long arg_val = *(long *)args[0];
+            if (f->type == SYSCALLS_HC_FILTER_EXACT) {
+                if (arg_val != f->value) return false;
+            } else {
+                if (!value_matches_filter(arg_val, f)) return false;
+            }
+        }
+    }
+    if (argc > 1) {
+        struct value_filter *f = &hook->hook.arg_filters[1];
+        if (f->enabled) {
+            long arg_val = *(long *)args[1];
+            if (f->type == SYSCALLS_HC_FILTER_EXACT) {
+                if (arg_val != f->value) return false;
+            } else {
+                if (!value_matches_filter(arg_val, f)) return false;
+            }
+        }
+    }
+    if (argc > 2) {
+        struct value_filter *f = &hook->hook.arg_filters[2];
+        if (f->enabled) {
+            long arg_val = *(long *)args[2];
+            if (f->type == SYSCALLS_HC_FILTER_EXACT) {
+                if (arg_val != f->value) return false;
+            } else {
+                if (!value_matches_filter(arg_val, f)) return false;
+            }
+        }
+    }
+    if (argc > 3) {
+        struct value_filter *f = &hook->hook.arg_filters[3];
+        if (f->enabled) {
+            long arg_val = *(long *)args[3];
+            if (f->type == SYSCALLS_HC_FILTER_EXACT) {
+                if (arg_val != f->value) return false;
+            } else {
+                if (!value_matches_filter(arg_val, f)) return false;
+            }
+        }
+    }
+    if (argc > 4) {
+        struct value_filter *f = &hook->hook.arg_filters[4];
+        if (f->enabled) {
+            long arg_val = *(long *)args[4];
+            if (f->type == SYSCALLS_HC_FILTER_EXACT) {
+                if (arg_val != f->value) return false;
+            } else {
+                if (!value_matches_filter(arg_val, f)) return false;
+            }
+        }
+    }
+    if (argc > 5) {
+        struct value_filter *f = &hook->hook.arg_filters[5];
+        if (f->enabled) {
+            long arg_val = *(long *)args[5];
+            if (f->type == SYSCALLS_HC_FILTER_EXACT) {
+                if (arg_val != f->value) return false;
+            } else {
+                if (!value_matches_filter(arg_val, f)) return false;
             }
         }
     }
