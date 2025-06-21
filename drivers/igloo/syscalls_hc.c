@@ -128,13 +128,9 @@ static inline void do_hyp(bool is_enter, struct syscall_event* args) {
                 (unsigned long)args, 0);
 }
 
-/* Check if a value matches a filter */
+/* Check if a value matches a filter that is assumed to be enabled */
 static inline bool value_matches_filter(long value, const struct value_filter *filter)
 {
-    if (!filter->enabled) {
-        return true; // No filtering, always matches
-    }
-    
     switch (filter->type) {
         case SYSCALLS_HC_FILTER_EXACT:
             return value == filter->value;
@@ -204,10 +200,18 @@ static inline bool hook_matches_syscall(struct kernel_syscall_hook *hook, const 
         }
     }
     for (int i = 0; i < IGLOO_SYSCALL_MAXARGS && i < argc; i++) {
-        if (hook->hook.arg_filters[i].enabled) {
-            unsigned long arg_ptr = args[i];
-            long arg_val = *(long *)arg_ptr;
-            if (!value_matches_filter(arg_val, &hook->hook.arg_filters[i])) {
+        struct value_filter *f = &hook->hook.arg_filters[i];
+        if (!f->enabled){
+		    continue;
+	    }
+        unsigned long arg_ptr = args[i];
+        long arg_val = *(long *)arg_ptr;
+        if (f->type == SYSCALLS_HC_FILTER_EXACT){
+            if (arg_val != f->value){
+		    return false;
+	    }
+	    }else{
+            if (!value_matches_filter(arg_val, f)) {
                 return false;
             }
         }
@@ -221,10 +225,14 @@ static inline bool hook_matches_syscall_return(struct kernel_syscall_hook *hook,
     if (!hook_matches_syscall(hook, syscall_name, argc, args)) {
         return false;
     }
-    if (!value_matches_filter(retval, &hook->hook.retval_filter)) {
-        return false;
+    struct value_filter *f = &hook->hook.retval_filter;
+    if (!f->enabled) {
+        return true;
     }
-    return true;
+    if (f->type == SYSCALLS_HC_FILTER_EXACT) {
+        return retval == f->value;
+    }
+    return value_matches_filter(retval, f);
 }
 
 // Unified syscall hook processing function
