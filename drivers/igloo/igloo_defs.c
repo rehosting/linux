@@ -7,6 +7,10 @@
 #include <linux/syscalls.h>
 #include <asm/unistd.h>
 #include <asm/syscall.h>
+// Add this include for compat_uptr_t
+#ifdef CONFIG_COMPAT
+#include <linux/compat.h>
+#endif
 #include "syscall_macros.h"
 #include "igloo.h"
 
@@ -64,7 +68,8 @@ extern const unsigned long sysn32_call_table[];
 #ifdef CONFIG_MIPS32_O32
 extern const unsigned long sys32_call_table[];
 #endif
-extern unsigned long sys_ni_syscall;
+// Fix: Use proper function declaration instead of variable
+extern asmlinkage long sys_ni_syscall(void);
 #else
 extern const unsigned long sys_call_table[];
 #endif
@@ -87,7 +92,8 @@ unsigned long igloo_arch_syscall_addr(int nr) {
         return (unsigned long)sys32_call_table[nr - __NR_O32_Linux];
     #endif
 
-    return (unsigned long) &sys_ni_syscall;
+    // Fix: Cast function pointer to unsigned long
+    return (unsigned long)sys_ni_syscall;
     #endif
     #endif // CONFIG_MIPS
     return (unsigned long)sys_call_table[nr];
