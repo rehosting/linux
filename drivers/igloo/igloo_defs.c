@@ -71,7 +71,12 @@ extern const unsigned long sys32_call_table[];
 // Fix: Use proper function declaration instead of variable
 extern asmlinkage long sys_ni_syscall(void);
 #else
+// Architecture-specific sys_call_table declarations
+#ifdef CONFIG_RISCV
+// RISC-V uses void * const[] - already declared in asm/syscall.h
+#else
 extern const unsigned long sys_call_table[];
+#endif
 #endif
 
 unsigned long igloo_arch_syscall_addr(int nr) {
@@ -248,9 +253,16 @@ EXPORT_SYMBOL(kallsyms_lookup);
 extern unsigned long kallsyms_lookup_name(const char *name);
 EXPORT_SYMBOL(kallsyms_lookup_name);
 
-// Syscall table
+// Syscall table - handle architecture-specific types
+#ifndef CONFIG_RISCV
+// Only declare and export if not RISC-V (which already declares it differently)
 extern const unsigned long sys_call_table[];
 EXPORT_SYMBOL(sys_call_table);
+#else
+// For RISC-V, sys_call_table is already declared in asm/syscall.h as void * const[]
+// We can still export it, but don't redeclare
+EXPORT_SYMBOL(sys_call_table);
+#endif
 
 // Architecture-specific functions
 extern const char *arch_vma_name(struct vm_area_struct *vma);
