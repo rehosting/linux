@@ -72,8 +72,10 @@ extern const unsigned long sys32_call_table[];
 extern asmlinkage long sys_ni_syscall(void);
 #else
 // Architecture-specific sys_call_table declarations
-#ifdef CONFIG_RISCV
-// RISC-V uses void * const[] - already declared in asm/syscall.h
+#if defined(CONFIG_RISCV) || defined(CONFIG_LOONGARCH)
+// RISC-V and LoongArch use different types - already declared in asm/syscall.h
+// RISC-V: void * const[]
+// LoongArch: void *[]
 #else
 extern const unsigned long sys_call_table[];
 #endif
@@ -254,13 +256,13 @@ extern unsigned long kallsyms_lookup_name(const char *name);
 EXPORT_SYMBOL(kallsyms_lookup_name);
 
 // Syscall table - handle architecture-specific types
-#ifndef CONFIG_RISCV
-// Only declare and export if not RISC-V (which already declares it differently)
+#if !defined(CONFIG_RISCV) && !defined(CONFIG_LOONGARCH)
+// Only declare and export if not RISC-V or LoongArch (which already declare it differently)
 extern const unsigned long sys_call_table[];
 EXPORT_SYMBOL(sys_call_table);
 #else
-// For RISC-V, sys_call_table is already declared in asm/syscall.h as void * const[]
-// We can still export it, but don't redeclare
+// For RISC-V and LoongArch, sys_call_table is already declared in asm/syscall.h
+// with different types, so we don't redeclare - just export
 EXPORT_SYMBOL(sys_call_table);
 #endif
 
