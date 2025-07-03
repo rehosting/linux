@@ -6,9 +6,9 @@
 #include <linux/parser.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
-#include <../drivers/igloo/hypercall.h>
+#include <hypercall.h>
 #include "../internal.h"
-#include "../drivers/igloo/igloo.h"
+#include "igloo.h"
 #include "hyperfs_consts.h"
 
 #define HYPERFS_DEBUG 0

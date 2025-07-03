@@ -49,7 +49,7 @@
 #include <linux/rseq.h>
 #include <asm/param.h>
 #include <asm/page.h>
-#include <../drivers/igloo/igloo.h>
+#include <igloo.h>
 
 #ifndef ELF_COMPAT
 #define ELF_COMPAT 0

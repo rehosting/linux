@@ -11,7 +11,7 @@
 #ifdef CONFIG_COMPAT
 #include <linux/compat.h>
 #endif
-#include "syscall_macros.h"
+#include "igloo_syscall_macros.h"
 #include "igloo.h"
 
 /* from fs/exec.c */

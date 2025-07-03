@@ -68,7 +68,7 @@
 #include <linux/user_events.h>
 #include <linux/rseq.h>
 #include <linux/ksm.h>
-#include <../drivers/igloo/igloo.h>
+#include <igloo.h>
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
