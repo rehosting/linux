@@ -196,4 +196,4 @@ obj-$(CONFIG_DPLL)		+= dpll/
 
 obj-$(CONFIG_S390)		+= s390/
 # Added
-obj-$(CONFIG_IGLOO) += igloo/igloo_defs.o
+obj-y += igloobase/
