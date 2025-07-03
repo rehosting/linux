@@ -21,7 +21,7 @@
 #include <linux/elf-randomize.h>
 #include <asm/elf.h>
 #include <asm/io.h>
-#include <../drivers/igloo/igloo.h>
+#include <igloo.h>
 
 #include "physaddr.h"
 
