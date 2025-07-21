@@ -11,10 +11,12 @@
 #include "igloo.h"
 
 /* Syscall hooks */
-igloo_syscall_enter_t __weak igloo_syscall_enter_hook = NULL;
-igloo_syscall_return_t __weak igloo_syscall_return_hook = NULL;
+igloo_syscall_enter_t igloo_syscall_enter_hook = NULL;
+igloo_syscall_return_t igloo_syscall_return_hook = NULL;
 EXPORT_SYMBOL(igloo_syscall_enter_hook);
 EXPORT_SYMBOL(igloo_syscall_return_hook);
+
+bool igloo_should_block_mount(struct path *path);
 
 bool __weak igloo_should_block_mount(struct path *path)
 {

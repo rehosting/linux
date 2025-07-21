@@ -15,8 +15,7 @@
 #include "hypercall.h" // Content is now included directly below
 #include "igloo.h"
 #include "igloobase.h"
-
-#define IGLOO_HYP_SETUP_SYSCALL 0x1337
+#include "igloobasehypercalls.h"
 
 extern struct syscall_metadata *__start_syscalls_metadata[];
 extern struct syscall_metadata *__stop_syscalls_metadata[];
