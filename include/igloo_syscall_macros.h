@@ -70,7 +70,7 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 
 
 #define __SC_CONDITIONAL_ASSIGN(idx, type) \
-	{ type __temp_val = (type)(uintptr_t)le64_to_cpu(new_args_le64[idx]); \
+	{ type __temp_val = (type)(uintptr_t)(new_args_le64[idx]); \
 	  memcpy((void *)(uintptr_t)args_ptr_array[idx], &__temp_val, sizeof(type)); \
 	  (void)0; }
 
