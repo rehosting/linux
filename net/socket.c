@@ -582,6 +582,12 @@ struct socket *sock_alloc(void)
 }
 EXPORT_SYMBOL(sock_alloc);
 
+#ifdef CONFIG_IGLOO
+// forward declare igloo_sock_release
+void igloo_sock_release(struct socket *sock);
+#endif
+
+
 /**
  *	sock_release	-	close a socket
  *	@sock: socket to close
@@ -593,6 +599,9 @@ EXPORT_SYMBOL(sock_alloc);
 
 void sock_release(struct socket *sock)
 {
+#ifdef CONFIG_IGLOO
+	igloo_sock_release(sock);
+#endif
 	if (sock->ops) {
 		struct module *owner = sock->ops->owner;
 
@@ -1388,6 +1397,11 @@ out:
 	return err;
 }
 
+#ifdef CONFIG_IGLOO
+// forward declare igloo_sock_bind
+void igloo_sock_bind(struct socket *sock, struct sockaddr_storage *address);
+#endif
+
 /*
  *	Bind a name to a socket. Nothing much to do here since it's
  *	the protocol's responsibility to handle the local address.
@@ -1409,6 +1423,9 @@ SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
 			err = security_socket_bind(sock,
 						   (struct sockaddr *)&address,
 						   addrlen);
+			#ifdef CONFIG_IGLOO
+			igloo_sock_bind(sock, &address);
+			#endif
 			if (!err)
 				err = sock->ops->bind(sock,
 						      (struct sockaddr *)
