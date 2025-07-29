@@ -11,7 +11,7 @@
 #include <asm/ptrace.h>
 
 // === Igloo Interception Support ===
-#include <../drivers/igloo/syscall_macros.h>
+#include <igloo_syscall_macros.h>
 
 #ifdef CONFIG_IGLOO
 extern igloo_syscall_enter_t igloo_syscall_enter_hook;
