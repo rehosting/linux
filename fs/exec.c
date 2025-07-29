@@ -1433,6 +1433,10 @@ void setup_new_exec(struct linux_binprm * bprm)
 	 * some architectures like powerpc
 	 */
 	me->mm->task_size = TASK_SIZE;
+	//Begin for igloo: if we moved the stack, we have to move mmap
+	if(igloo_task_size)
+        current->mm->task_size = igloo_task_size;
+    //End for igloo
 	up_write(&me->signal->exec_update_lock);
 	mutex_unlock(&me->signal->cred_guard_mutex);
 }
