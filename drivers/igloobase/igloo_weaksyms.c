@@ -33,7 +33,17 @@ EXPORT_SYMBOL(igloo_sock_bind);
 void __weak igloo_hc_newuname(struct new_utsname *name) {}
 EXPORT_SYMBOL(igloo_hc_newuname);
 
+void igloo_hc_open(int dfd, const char __user *filename,
+			  struct open_how *how);
+void __weak igloo_hc_open(int dfd, const char __user *filename,
+			   struct open_how *how) {}
+EXPORT_SYMBOL(igloo_hc_open);
 
+void __weak igloo_ioctl(int error, 
+        struct inode *inode, struct file *filp, 
+        unsigned int cmd, void __user * argp) {}
+
+EXPORT_SYMBOL(igloo_ioctl);
 /* Export internal symbols needed for introspection research */
 
 // Symbol lookup functions - now pulled in by trace/syscall.h
