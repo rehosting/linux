@@ -1,0 +1,6 @@
+config HYPERFS_FS
+	tristate "Hyperfs Filesystem"
+	depends on IGLOO
+    default y
+	help
+      This is the IGLOO Hyperfs FS
