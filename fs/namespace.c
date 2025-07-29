@@ -3746,6 +3746,11 @@ static char *copy_mount_string(const void __user *data)
 	return data ? strndup_user(data, PATH_MAX) : NULL;
 }
 
+#ifdef CONFIG_IGLOO
+// forward declare igloo_should_block_mount
+bool igloo_should_block_mount(struct path *path);
+#endif
+
 /*
  * Flags is a 32-bit value that allows up to 31 non-fs dependent flags to
  * be given to the mount() call (ie: read-only, no-dev, no-suid etc).
@@ -3784,7 +3789,12 @@ int path_mount(const char *dev_name, struct path *path,
 		return -EPERM;
 	if (flags & SB_MANDLOCK)
 		warn_mandlock();
-
+	
+#ifdef CONFIG_IGLOO
+	if (igloo_should_block_mount(path)){
+		return 0;
+	}
+#endif
 	/* Default to relatime unless overriden */
 	if (!(flags & MS_NOATIME))
 		mnt_flags |= MNT_RELATIME;
