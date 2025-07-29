@@ -1956,8 +1956,6 @@ static int do_execveat_common(int fd, struct filename *filename,
 	}
 
 	retval = bprm_execve(bprm);
-
-	igloo_exec_succeeded(filename, argv, envp, bprm);
 out_free:
 	free_bprm(bprm);
 
