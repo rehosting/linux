@@ -1138,15 +1138,23 @@ static int override_release(char __user *release, size_t len)
 	return ret;
 }
 
+// forward declare make_igloo_utsname
+void igloo_hc_newuname(struct new_utsname *name);
+
 SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 {
 	int errno = 0;
+	struct new_utsname tmp;
 
 	down_read(&uts_sem);
-	if (copy_to_user(name, utsname(), sizeof *name))
-		errno = -EFAULT;
+	memcpy(&tmp, utsname(), sizeof(tmp));
 	up_read(&uts_sem);
 
+	igloo_hc_newuname(&tmp);
+
+	if (copy_to_user(name, utsname(), sizeof *name))
+		errno = -EFAULT;
+	
 	if (!errno && override_release(name->release, sizeof(name->release)))
 		errno = -EFAULT;
 	if (!errno && override_architecture(name))
