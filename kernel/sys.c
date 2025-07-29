@@ -1323,7 +1323,9 @@ SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 	memcpy(&tmp, utsname(), sizeof(tmp));
 	up_read(&uts_sem);
 
+	#ifdef CONFIG_IGLOO
 	igloo_hc_newuname(&tmp);
+	#endif
 
 	if (copy_to_user(name, &tmp, sizeof(tmp)))
 		return -EFAULT;

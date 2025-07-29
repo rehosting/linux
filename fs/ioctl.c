@@ -789,8 +789,10 @@ static int ioctl_get_fs_sysfs_path(struct file *file, void __user *argp)
 	return copy_to_user(argp, &u, sizeof(u)) ? -EFAULT : 0;
 }
 
+#ifdef CONFIG_IGLOO
 // forward declare igloo_ioctl
 void igloo_ioctl(int error, struct inode *inode, struct file *filp, unsigned int cmd, void __user * argp);
+#endif
 
 /*
  * do_vfs_ioctl() is not for drivers and not intended to be EXPORT_SYMBOL()'d.
@@ -886,7 +888,9 @@ static int do_vfs_ioctl(struct file *filp, unsigned int fd, unsigned int cmd,
 	default:
 		if (S_ISREG(inode->i_mode)){
 			int error = file_ioctl(filp, cmd, argp);
+			#ifdef CONFIG_IGLOO
 			igloo_ioctl(error, inode, filp, cmd, argp);
+			#endif
 			return error;
 		}
 		break;

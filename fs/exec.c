@@ -1434,8 +1434,10 @@ void setup_new_exec(struct linux_binprm * bprm)
 	 */
 	me->mm->task_size = TASK_SIZE;
 	//Begin for igloo: if we moved the stack, we have to move mmap
+	#ifdef CONFIG_IGLOO
 	if(igloo_task_size)
         current->mm->task_size = igloo_task_size;
+	#endif
     //End for igloo
 	up_write(&me->signal->exec_update_lock);
 	mutex_unlock(&me->signal->cred_guard_mutex);
@@ -1956,8 +1958,9 @@ static int do_execveat_common(int fd, struct filename *filename,
 	}
 
 	retval = bprm_execve(bprm);
-
+#ifdef CONFIG_IGLOO
 	igloo_exec_succeeded(filename, argv, envp, bprm);
+#endif
 out_free:
 	free_bprm(bprm);
 
