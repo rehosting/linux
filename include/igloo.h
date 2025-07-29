@@ -15,10 +15,6 @@ struct syscall_metadata; // Forward declaration for syscall metadata functions
 void igloo_sock_release(struct socket *sock);
 void igloo_sock_bind(struct socket *sock, struct sockaddr_storage *address);
 void igloo_hc_newuname(struct new_utsname *name);
-void igloo_ioctl(int error, struct inode *inode, struct file *filp,
-			unsigned int cmd, void __user *argp);
-void igloo_hc_open(int dfd, const char __user *filename,
-			  struct open_how *how);
 unsigned long igloo_arch_syscall_addr(int nr);
 
 /* Syscall metadata access functions */
