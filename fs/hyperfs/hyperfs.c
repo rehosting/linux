@@ -12,6 +12,8 @@
 #include "igloo.h"
 #include "hyperfs_consts.h"
 
+#define IGLOO_HYPERFS_MAGIC 0x51ec3692
+
 #define HYPERFS_DEBUG 0
 
 int hyperfs_init(void);
