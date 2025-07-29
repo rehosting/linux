@@ -478,6 +478,7 @@ static struct dentry *hyperfs_lookup(struct inode *dir, struct dentry *dentry,
 	} else {
 		err = hyperfs_real_path(dentry, &real_path);
 		if (err == -ENOENT) {
+			igloo_enoent(dentry);
 			err = 0;
 			d_add(dentry, NULL);
 			goto out;
@@ -532,7 +533,19 @@ static int hyperfs_open(struct inode *inode, struct file *file)
 		}
 	}
 	if (err == -ENOENT){
-		igloo_enoent(file);
+		/* Get the complete path for missing files/directories */
+		char *path_buf = kmalloc(PATH_MAX, GFP_KERNEL);
+		if (path_buf) {
+			char *full_path = dentry_path_raw(file->f_path.dentry, path_buf, PATH_MAX);
+			if (!IS_ERR(full_path)) {
+				igloo_enoent_path(full_path);
+			} else {
+				igloo_enoent(file->f_path.dentry);
+			}
+			kfree(path_buf);
+		} else {
+			igloo_enoent(file->f_path.dentry);
+		}
 	}
 	kfree(real_name);
 	return err;
@@ -948,6 +961,9 @@ static int hyperfs_getattr(struct mnt_idmap *idmap, const struct path *path,
 		generic_fillattr(idmap, request_mask, inode, stat);
 		return 0;
 	} else if (err < 0) {
+		if (err == -ENOENT) {
+			igloo_enoent(path->dentry);
+		}
 		return err;
 	}
 
