@@ -64,7 +64,7 @@
 
 
 // === Igloo Interception Support ===
-#include <../drivers/igloo/syscall_wrapper.h>
+#include <../drivers/igloo/syscall_macros.h>
 
 #ifdef CONFIG_IGLOO
 extern igloo_syscall_enter_t igloo_syscall_enter_hook;
@@ -84,7 +84,9 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 	asmlinkage long compat_sys##name(__MAP(x, __SC_DECL, __VA_ARGS__))    \
 		__attribute__((alias(__stringify(__se_compat_sys##name))));   \
 	ALLOW_ERROR_INJECTION(compat_sys##name, ERRNO);                       \
-	IGLOO_ARGS_SETTER(compat_##name)                                      \
+	void __igloo_set_args_compat##name(const unsigned long args_ptr_array[], const __le64 new_args_le64[]); \
+	void __igloo_set_args_compat##name(const unsigned long args_ptr_array[], const __le64 new_args_le64[]) \
+	{ __SC_GEN_SETTER_BODY_WRAPPER(x, __VA_ARGS__); }					\
 	static inline long __do_compat_sys##name(                             \
 		__MAP(x, __SC_DECL, __VA_ARGS__));                            \
 	asmlinkage long __se_compat_sys##name(                                \

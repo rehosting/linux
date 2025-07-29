@@ -214,6 +214,7 @@
  #endif
  
 #ifdef CONFIG_IGLOO
+#include <../drivers/igloo/syscall_macros.h>
 /* === Igloo Interception Hooks and Helpers === */
 
 /* Pointers to the actual hook functions */
