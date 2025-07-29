@@ -9,8 +9,8 @@
 #include <linux/slab.h>
 #include "../internal.h"
 #include "../drivers/igloo/ioctl_hc.h"
+#include "../drivers/igloo/igloo.h"
 
-#define MAGIC_VALUE 0x51ec3692 // crc32("hyperfs")
 #define HYPERFS_DEBUG 0
 
 struct hyperfs_tree {
@@ -326,7 +326,7 @@ static struct hyperfs_tree *hyperfs_tree_build(struct super_block *sb)
 	if (!root->inode)
 		goto out;
 
-	igloo_hypercall2(MAGIC_VALUE, HYP_GET_NUM_HYPERFILES,
+	igloo_hypercall2(IGLOO_HYPERFS_MAGIC, HYP_GET_NUM_HYPERFILES,
 			 (long)&num_hyperfiles);
 
 	paths = kcalloc(num_hyperfiles, sizeof(*paths), GFP_KERNEL);
@@ -339,7 +339,7 @@ static struct hyperfs_tree *hyperfs_tree_build(struct super_block *sb)
 			goto out;
 	}
 
-	igloo_hypercall2(MAGIC_VALUE, HYP_GET_HYPERFILE_PATHS, (long)paths);
+	igloo_hypercall2(IGLOO_HYPERFS_MAGIC, HYP_GET_HYPERFILE_PATHS, (long)paths);
 
 	for (i = 0; i < num_hyperfiles; i++) {
 		err = hyperfs_tree_add_hyperfile(sb, root, paths[i]);
@@ -399,7 +399,7 @@ static int hyp_file_op(struct hyperfs_data data)
 
 	do {
 		page_in_hyperfs_data(&data);
-		err = igloo_hypercall2(MAGIC_VALUE, HYP_FILE_OP,
+		err = igloo_hypercall2(IGLOO_HYPERFS_MAGIC, HYP_FILE_OP,
 				       (unsigned long)&data);
 	} while (err == 0xdeadbeef);
 	return err;
