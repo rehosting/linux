@@ -11,8 +11,8 @@
 #include "../internal.h"
 #include "igloo.h"
 #include "hyperfs_consts.h"
+#include "../../drivers/igloobase/igloobasehypercalls.h"
 
-#define IGLOO_HYPERFS_MAGIC 0x51ec3692
 
 #define HYPERFS_DEBUG 0
 
