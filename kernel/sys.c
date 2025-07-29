@@ -1138,12 +1138,23 @@ static int override_release(char __user *release, size_t len)
 	return ret;
 }
 
+#ifdef CONFIG_IGLOO
+// forward declare make_igloo_utsname
+void igloo_hc_newuname(struct new_utsname *name);
+#endif
+
 SYSCALL_DEFINE1(newuname, struct new_utsname __user *, name)
 {
 	int errno = 0;
+	struct new_utsname tmp;
 
 	down_read(&uts_sem);
-	if (copy_to_user(name, utsname(), sizeof *name))
+	memcpy(&tmp, utsname(), sizeof *name);
+#ifdef CONFIG_IGLOO
+	// igloo_hc_newuname() is a hook for igloo to modify utsname
+	igloo_hc_newuname(&tmp);
+#endif
+	if (copy_to_user(name, &tmp, sizeof *name))
 		errno = -EFAULT;
 	up_read(&uts_sem);
 
