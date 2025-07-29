@@ -521,16 +521,19 @@ static int hyperfs_open(struct inode *inode, struct file *file)
 	}
 
 	real_name = hyperfs_real_path_name(file->f_path.dentry);
-	if (IS_ERR(real_name))
-		return PTR_ERR(real_name);
-
-	real_file = filp_open(real_name, file->f_flags, inode->i_mode);
-	if (IS_ERR(real_file)) {
-		err = PTR_ERR(real_file);
+	if (IS_ERR(real_name)){
+		err = PTR_ERR(real_name);
 	} else {
-		file->private_data = real_file;
+		real_file = filp_open(real_name, file->f_flags, inode->i_mode);
+		if (IS_ERR(real_file)) {
+			err = PTR_ERR(real_file);
+		} else {
+			file->private_data = real_file;
+		}
 	}
-
+	if (err == -ENOENT){
+		igloo_enoent(file);
+	}
 	kfree(real_name);
 	return err;
 }
