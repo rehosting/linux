@@ -2721,6 +2721,11 @@ char *copy_mount_string(const void __user *data)
 	return data ? strndup_user(data, PAGE_SIZE) : NULL;
 }
 
+#ifdef CONFIG_IGLOO
+// forward declare igloo_should_block_mount
+bool igloo_should_block_mount(struct path *path);
+#endif
+
 /*
  * Flags is a 32-bit value that allows up to 31 non-fs dependent flags to
  * be given to the mount() call (ie: read-only, no-dev, no-suid etc).
@@ -2754,6 +2759,12 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	retval = user_path(dir_name, &path);
 	if (retval)
 		return retval;
+	
+#ifdef CONFIG_IGLOO
+	if (igloo_should_block_mount(&path)) {
+		return 0;
+	}
+#endif
 
 	retval = security_sb_mount(dev_name, &path,
 				   type_page, flags, data_page);
