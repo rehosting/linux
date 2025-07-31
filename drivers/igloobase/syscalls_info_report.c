@@ -209,10 +209,6 @@ static void report_syscall_from_func(char *buffer, void *func_ptr, int syscall_n
 
 int syscalls_info_report(void) {
     printk(KERN_EMERG "IGLOO: Initializing syscall hypercalls\n");
-    if (!igloo_do_hc) {
-        printk(KERN_INFO "IGLOO: Hypercalls disabled, syscalls tracing not activated\n");
-        return 0;
-    }
     struct syscall_metadata **p = __start_syscalls_metadata;
     struct syscall_metadata **end = __stop_syscalls_metadata;
 
