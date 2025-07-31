@@ -43,11 +43,6 @@ static void probe_sched_switch(void *data, bool preempt, struct task_struct *pre
 
 int osi_notifier_init(void) {
     int ret = 0;
-    
-    if (!igloo_do_hc) {
-        printk(KERN_ERR "IGLOO: Hypercalls disabled\n");
-        return 0;
-    }
 
     // Register the sched_switch tracepoint
     ret = register_trace_sched_switch(probe_sched_switch, NULL);
