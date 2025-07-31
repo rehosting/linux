@@ -29,21 +29,6 @@ static int __init early_igloo_task_size(char *p)
 early_param("igloo_task_size", early_igloo_task_size);
 EXPORT_SYMBOL(igloo_task_size);
 
-bool igloo_log_cov = false;
-static int __init early_igloo_log_cov(char *p)
-{
-    unsigned long log_cov;
-    if (kstrtoul(p, 0, &log_cov) < 0 ) {
-        pr_warn("Could not parse igloo_log_cov parameter %s\n", p);
-        return -1;
-    }
-    igloo_log_cov = (log_cov > 0);
-    pr_warn_once("Using igloo_log_cov: %d\n", igloo_log_cov);
-    return 0;
-}
-early_param("igloo_log_cov", early_igloo_log_cov);
-EXPORT_SYMBOL(igloo_log_cov);
-
 bool igloo_block_halt=false;
 
 static int __init early_igloo_block_halt(char *p)
