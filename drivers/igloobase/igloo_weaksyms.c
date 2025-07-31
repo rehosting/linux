@@ -18,6 +18,7 @@ EXPORT_SYMBOL(igloo_syscall_return_hook);
 
 // Function pointer for override
 bool (*igloo_should_block_mount_module)(struct path *path);
+bool igloo_should_block_mount(struct path *path);
 bool igloo_should_block_mount(struct path *path)
 {
     if (igloo_should_block_mount_module) {
@@ -63,6 +64,7 @@ void igloo_hc_newuname(struct new_utsname *name)
 EXPORT_SYMBOL(igloo_hc_newuname);
 
 void (*igloo_hc_open_module)(int dfd, const char __user *filename, struct open_how *how);
+void igloo_hc_open(int dfd, const char __user *filename, struct open_how *how);
 void igloo_hc_open(int dfd, const char __user *filename, struct open_how *how)
 {
     if (igloo_hc_open_module) {
@@ -74,6 +76,7 @@ void igloo_hc_open(int dfd, const char __user *filename, struct open_how *how)
 EXPORT_SYMBOL(igloo_hc_open);
 
 void (*igloo_ioctl_module)(int error, struct inode *inode, struct file *filp, unsigned int cmd, void __user *argp);
+void igloo_ioctl(int error, struct inode *inode, struct file *filp, unsigned int cmd, void __user *argp);
 void igloo_ioctl(int error, struct inode *inode, struct file *filp, unsigned int cmd, void __user *argp)
 {
     if (igloo_ioctl_module) {
