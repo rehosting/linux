@@ -61,6 +61,7 @@
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
 #include <asm/tlb.h>
+#include <igloo.h>
 
 #include <trace/events/task.h>
 #include "internal.h"
@@ -1323,6 +1324,10 @@ void setup_new_exec(struct linux_binprm * bprm)
 	 * some architectures like powerpc
 	 */
 	current->mm->task_size = TASK_SIZE;
+	#ifdef CONFIG_IGLOO
+	if (igloo_task_size)
+		current->mm->task_size = igloo_task_size;
+	#endif
 
 	/* install the new credentials */
 	if (!uid_eq(bprm->cred->uid, current_euid()) ||
