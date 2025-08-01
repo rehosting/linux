@@ -30,6 +30,7 @@
 #include <linux/limits.h>
 #include <linux/sched.h>
 #include <asm/elf.h>
+#include <igloo.h>
 
 struct va_alignment __read_mostly va_align = {
 	.flags = -1,
@@ -89,6 +90,14 @@ static unsigned long mmap_base(unsigned long rnd)
 		gap = MIN_GAP;
 	else if (gap > MAX_GAP)
 		gap = MAX_GAP;
+	
+	#ifdef CONFIG_IGLOO
+    if(igloo_task_size) {
+        return PAGE_ALIGN(igloo_task_size - gap - rnd);
+    } else {
+        return PAGE_ALIGN(TASK_SIZE - gap - rnd);
+    }
+	#endif
 
 	return PAGE_ALIGN(TASK_SIZE - gap - rnd);
 }
