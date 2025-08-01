@@ -1434,7 +1434,8 @@ void setup_new_exec(struct linux_binprm * bprm)
 	 */
 	me->mm->task_size = TASK_SIZE;
 	#ifdef CONFIG_IGLOO
-	current->mm->task_size = igloo_task_size;
+	if (igloo_task_size)
+		current->mm->task_size = igloo_task_size;
 	#endif
 	up_write(&me->signal->exec_update_lock);
 	mutex_unlock(&me->signal->cred_guard_mutex);
