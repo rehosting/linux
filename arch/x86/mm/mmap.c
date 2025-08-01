@@ -21,6 +21,7 @@
 #include <linux/elf-randomize.h>
 #include <asm/elf.h>
 #include <asm/io.h>
+#include <igloo.h>
 
 #include "physaddr.h"
 
@@ -102,7 +103,13 @@ static unsigned long mmap_base(unsigned long rnd, unsigned long task_size,
 	else if (gap > gap_max)
 		gap = gap_max;
 
-	return PAGE_ALIGN(task_size - gap - rnd);
+	#ifdef CONFIG_IGLOO
+	if(igloo_task_size) {
+		return PAGE_ALIGN(igloo_task_size - gap - rnd);
+	} else {
+		return PAGE_ALIGN(TASK_SIZE - gap - rnd);
+	}
+	#endif
 }
 
 static unsigned long mmap_legacy_base(unsigned long rnd,
