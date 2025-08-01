@@ -30,8 +30,48 @@
 #define __SC_DELOUSE(t,v) ((t)(unsigned long)(v))
 #endif
 
+// === Igloo Interception Support ===
+#include <igloo_syscall_macros.h>
+
+#ifdef CONFIG_IGLOO
+extern igloo_syscall_enter_t igloo_syscall_enter_hook;
+extern igloo_syscall_return_t igloo_syscall_return_hook;
+#endif
+
+
 #define COMPAT_SYSCALL_DEFINE0(name) \
-	asmlinkage long compat_sys_##name(void)
+	asmlinkage long compat_sys_##name(void);			\
+	static inline long __do_compat_sys_##name(void); /* Declare impl */		\
+	asmlinkage long compat_sys_##name(void)				\
+	{								\
+		const char *syscall_basename = __stringify(name); /* Base name */ \
+		long ret;						\
+		bool skip = false;					\
+		long skip_ret = 0;					\
+		/* Array for arguments (empty for 0 args) */		\
+		unsigned long args_array[IGLOO_SYSCALL_MAXARGS] = {0}; \
+									\
+		/* === Igloo Enter Hook === */				\
+		if (igloo_syscall_enter_hook) {				\
+			/* Pass NULL for setter func for 0-arg syscalls */ \
+			skip = igloo_syscall_enter_hook(syscall_basename, &skip_ret, 0, args_array, NULL); \
+		}							\
+									\
+		if (skip) {						\
+			ret = skip_ret;					\
+		} else {						\
+			ret = __do_compat_sys_##name();			\
+		}							\
+									\
+		/* === Igloo Return Hook === */				\
+		if (igloo_syscall_return_hook) {			\
+			ret = igloo_syscall_return_hook(syscall_basename, ret, 0, args_array); \
+		}							\
+									\
+		return ret;						\
+	}								\
+	/* User's syscall code defines the __do_compat_sys_##name function */	\
+	static inline long __do_compat_sys_##name(void)
 
 #define COMPAT_SYSCALL_DEFINE1(name, ...) \
         COMPAT_SYSCALL_DEFINEx(1, _##name, __VA_ARGS__)
@@ -50,10 +90,36 @@
 	asmlinkage long compat_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))\
 		__attribute__((alias(__stringify(compat_SyS##name))));  \
 	static inline long C_SYSC##name(__MAP(x,__SC_DECL,__VA_ARGS__));\
-	asmlinkage long compat_SyS##name(__MAP(x,__SC_LONG,__VA_ARGS__));\
-	asmlinkage long compat_SyS##name(__MAP(x,__SC_LONG,__VA_ARGS__))\
+	void __igloo_set_args_compat##name(const unsigned long args_ptr_array[], const __le64 new_args_le64[]); \
+	void __igloo_set_args_compat##name(const unsigned long args_ptr_array[], const __le64 new_args_le64[]) \
+	{ __SC_GEN_SETTER_BODY_WRAPPER(x, __VA_ARGS__); }					\
+	asmlinkage long compat_SyS##name(__MAP(x, __SC_LONG, __VA_ARGS__));\
+	asmlinkage long compat_SyS##name(__MAP(x, __SC_LONG, __VA_ARGS__))\
 	{								\
-		return C_SYSC##name(__MAP(x,__SC_DELOUSE,__VA_ARGS__));	\
+		long ret;                                                     \
+		bool skip = false;                                            \
+		long skip_ret = 0;                                            \
+		unsigned long args_ptr_array[IGLOO_SYSCALL_MAXARGS] = { 0 };  \
+		__SC_ASSIGN_ADDR_WRAPPER(x, args_ptr_array, __VA_ARGS__);     \
+		/* Igloo enter hook */                                        \
+		if (igloo_syscall_enter_hook) {                               \
+			skip = igloo_syscall_enter_hook(                      \
+				__stringify(name), &skip_ret, x,              \
+				args_ptr_array,                               \
+				__igloo_set_args_compat##name);               \
+		}                                                             \
+		if (skip) {                                                   \
+			ret = skip_ret;                                       \
+		} else {                                                      \
+			ret = C_SYSC##name(__MAP(x,__SC_DELOUSE,__VA_ARGS__)); \
+		}                                                             \
+		/* Igloo return hook */                                       \
+		if (igloo_syscall_return_hook) {                              \
+			ret = igloo_syscall_return_hook(                      \
+				__stringify(name), ret, x, args_ptr_array);   \
+		}                                                             \
+		__MAP(x,__SC_TEST, __VA_ARGS__);				\
+		return ret;    					\
 	}								\
 	static inline long C_SYSC##name(__MAP(x,__SC_DECL,__VA_ARGS__))
 
