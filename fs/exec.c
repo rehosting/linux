@@ -72,6 +72,7 @@
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
 #include <asm/tlb.h>
+#include <igloo.h>
 
 #include <trace/events/task.h>
 #include "internal.h"
@@ -1432,6 +1433,9 @@ void setup_new_exec(struct linux_binprm * bprm)
 	 * some architectures like powerpc
 	 */
 	me->mm->task_size = TASK_SIZE;
+	#ifdef CONFIG_IGLOO
+	current->mm->task_size = igloo_task_size;
+	#endif
 	up_write(&me->signal->exec_update_lock);
 	mutex_unlock(&me->signal->cred_guard_mutex);
 }
