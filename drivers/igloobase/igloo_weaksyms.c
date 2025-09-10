@@ -62,11 +62,11 @@ void igloo_hc_newuname(struct new_utsname *name)
 }
 EXPORT_SYMBOL(igloo_hc_newuname);
 
-void (*igloo_hc_open_module)(int dfd, const char __user *filename, struct open_how *how);
-void igloo_hc_open(int dfd, const char __user *filename, struct open_how *how)
+void (*igloo_hc_open_module)(int dfd, const char __user *filename, int flags, umode_t mode);
+void igloo_hc_open(int dfd, const char __user *filename, int flags, umode_t mode)
 {
     if (igloo_hc_open_module) {
-        igloo_hc_open_module(dfd, filename, how);
+        igloo_hc_open_module(dfd, filename, flags, mode);
     } else {
         // printk(KERN_EMERG "igloo_hc_open: unimplemented\n");
     }

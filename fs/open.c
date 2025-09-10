@@ -1385,7 +1385,7 @@ EXPORT_SYMBOL(file_open_root);
 
 #ifdef CONFIG_IGLOO
 // forward declare for igloo_hc_open
-void igloo_hc_open(int dfd, struct filename *tmp, int fd);
+void igloo_hc_open(int dfd, struct filename *tmp, int flags, umode_t mode);
 #endif
 
 static long do_sys_openat2(int dfd, const char __user *filename,
@@ -1402,7 +1402,7 @@ static long do_sys_openat2(int dfd, const char __user *filename,
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
 	#ifdef CONFIG_IGLOO
-	igloo_hc_open(dfd, tmp, fd);
+	igloo_hc_open(dfd, tmp, how->flags, how->mode);
 	#endif
 	fd = get_unused_fd_flags(how->flags);
 	if (fd >= 0) {
