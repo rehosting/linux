@@ -42,11 +42,48 @@
 #define __SC_DELOUSE(t,v) ((__force t)(unsigned long)(v))
 #endif
 
+
+// === Igloo Interception Support ===
+#include <igloo_syscall_macros.h>
+
+#ifdef CONFIG_IGLOO
+extern igloo_syscall_enter_t igloo_syscall_enter_hook;
+extern igloo_syscall_return_t igloo_syscall_return_hook;
+#endif
+
 #ifndef COMPAT_SYSCALL_DEFINE0
 #define COMPAT_SYSCALL_DEFINE0(name) \
 	asmlinkage long compat_sys_##name(void); \
 	ALLOW_ERROR_INJECTION(compat_sys_##name, ERRNO); \
-	asmlinkage long compat_sys_##name(void)
+	asmlinkage long compat_sys_##name(void)	\
+	{										\
+		const char *syscall_basename = __stringify(name); /* Base name */ \
+		long ret;							\
+		bool skip = false;					\
+		long skip_ret = 0;					\
+		/* Array for arguments (empty for 0 args) */ \
+		unsigned long args_array[IGLOO_SYSCALL_MAXARGS] = {0}; \
+		/* === Igloo Enter Hook === */ \
+		if (igloo_syscall_enter_hook) {	\
+			/* Pass NULL for setter func for 0-arg syscalls */ \
+			skip = igloo_syscall_enter_hook(syscall_basename, &skip_ret, 0, args_array, NULL); \
+		}								\
+										\
+		if (skip) {						\
+			ret = skip_ret;				\
+		} else {						\
+			ret = __do_compat_sys_##name(); \
+		}								\
+										\
+		/* === Igloo Return Hook === */ \
+		if (igloo_syscall_return_hook) {	\
+			ret = igloo_syscall_return_hook(syscall_basename, ret, 0, args_array); \
+		}								\
+										\
+		return ret ;					\
+	}	\
+	static inline long __do_compat_sys_##name(void)
+
 #endif /* COMPAT_SYSCALL_DEFINE0 */
 
 #define COMPAT_SYSCALL_DEFINE1(name, ...) \
@@ -61,15 +98,6 @@
 	COMPAT_SYSCALL_DEFINEx(5, _##name, __VA_ARGS__)
 #define COMPAT_SYSCALL_DEFINE6(name, ...) \
 	COMPAT_SYSCALL_DEFINEx(6, _##name, __VA_ARGS__)
-
-
-// === Igloo Interception Support ===
-#include <igloo_syscall_macros.h>
-
-#ifdef CONFIG_IGLOO
-extern igloo_syscall_enter_t igloo_syscall_enter_hook;
-extern igloo_syscall_return_t igloo_syscall_return_hook;
-#endif
 
 /*
  * The asmlinkage stub is aliased to a function named __se_compat_sys_*() which
