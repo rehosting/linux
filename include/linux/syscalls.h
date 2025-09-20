@@ -191,6 +191,7 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 
 #define SYSCALL_DEFINE0(sname)                                                                 \
 	SYSCALL_METADATA(_##sname, 0);                                                             \
+	static inline long __do_sys_##sname(void);												   \
 	asmlinkage long sys_##sname(void)                                                          \
 	{                                                                                          \
 		const char *syscall_basename = __stringify(name); /* Base name */                      \
@@ -198,15 +199,14 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 		bool skip = false;                                                                     \
 		long skip_ret = 0;                                                                     \
 		/* Array for arguments (empty for 0 args) */                                           \
-		unsigned long args_array[IGLOO_SYSCALL_MAXARGS] = {0};                                 \
+		unsigned long args_ptr_array[IGLOO_SYSCALL_MAXARGS] = {0};                             \
                                                                                                \
 		/* === Igloo Enter Hook === */                                                         \
 		if (igloo_syscall_enter_hook)                                                          \
 		{                                                                                      \
 			/* Pass NULL for setter func for 0-arg syscalls */                                 \
-			skip = igloo_syscall_enter_hook(syscall_basename, &skip_ret, 0, args_array, NULL); \
+			skip = igloo_syscall_enter_hook(syscall_basename, &skip_ret, 0, args_ptr_array, NULL); \
 		}                                                                                      \
-                                                                                               \
 		if (skip)                                                                              \
 		{                                                                                      \
 			ret = skip_ret;                                                                    \
@@ -219,12 +219,12 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 		/* === Igloo Return Hook === */                                                        \
 		if (igloo_syscall_return_hook)                                                         \
 		{                                                                                      \
-			ret = igloo_syscall_return_hook(syscall_basename, ret, 0, args_array);             \
+			ret = igloo_syscall_return_hook(syscall_basename, ret, 0, args_ptr_array);         \
 		}                                                                                      \
                                                                                                \
 		/* Argument protection and final return */                                             \
 		__PROTECT(0, ret); /* Protect for 0 args */                                            \
-		return ret ;         		                                                           \
+		return ret;         		                                                           \
 	}																						   \
 	static inline long __do_sys_##sname(void)
 
@@ -256,10 +256,10 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 		long ret = 0;													\
 		bool skip = false;                                              \
 		long skip_ret = 0;                                              \
-		unsigned long args_array[IGLOO_SYSCALL_MAXARGS] = {0};          \
+		unsigned long args_ptr_array[IGLOO_SYSCALL_MAXARGS] = {0};          \
 																		\
 		/* Populate args_ptr_array with ADDRESSES for the enter hook */ \
-		__SC_ASSIGN_ADDR_WRAPPER(x, args_array, __VA_ARGS__);           \
+		__SC_ASSIGN_ADDR_WRAPPER(x, args_ptr_array, __VA_ARGS__);           \
 		 \
 		/* === Igloo Enter Hook === */				\
 		if (igloo_syscall_enter_hook) {				\
