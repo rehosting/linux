@@ -5,6 +5,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/syscalls.h>
+#include <linux/version.h>
 #include <asm/unistd.h>
 #include <asm/syscall.h>
 #include "igloo_syscall_macros.h"
@@ -91,18 +92,31 @@ EXPORT_SYMBOL(igloo_ioctl);
 // Symbol lookup functions - now pulled in by trace/syscall.h
 EXPORT_SYMBOL(kallsyms_lookup);
 
+
+// version not confirmed
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,10,0)
 extern unsigned long kallsyms_lookup_name(const char *name);
 EXPORT_SYMBOL(kallsyms_lookup_name);
+#endif
 
 // Architecture-specific functions
 extern const char *arch_vma_name(struct vm_area_struct *vma);
 EXPORT_SYMBOL(arch_vma_name);
 
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,10,0)
 // Process management
 extern pid_t kernel_clone(struct kernel_clone_args *args);
 EXPORT_SYMBOL(kernel_clone);
+#else
+// we will need another version here
+#endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,20,0)
 extern int kill_pid_info(int sig, struct kernel_siginfo *info, struct pid *pid);
+#else
+extern int kill_pid_info(int sig, struct siginfo *info, struct pid *pid); 
+#endif
 EXPORT_SYMBOL(kill_pid_info);
 
 // Memory access
