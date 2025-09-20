@@ -10,9 +10,6 @@ extern bool igloo_block_halt; // reboot.c
 struct user_arg_ptr;  // Forward declaration
 struct syscall_metadata; // Forward declaration for syscall metadata functions
 
-void igloo_sock_release(struct socket *sock);
-void igloo_sock_bind(struct socket *sock, struct sockaddr_storage *address);
-void igloo_hc_newuname(struct new_utsname *name);
 unsigned long igloo_arch_syscall_addr(int nr);
 
 /* Syscall metadata access functions */
