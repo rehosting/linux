@@ -87,15 +87,15 @@ find_syscall_meta_copy(unsigned long syscall)
 }
 
 static void report_syscall(char * buffer, struct syscall_metadata *meta){
+    int x, j;
     if (!meta || !meta->name) {
         return; // Skip invalid metadata
     }
     // Prepare JSON metadata for hypercall (ensure buffer is large enough)
-    int x = snprintf(buffer, PAGE_SIZE,
+    x = snprintf(buffer, PAGE_SIZE,
                    "{\"name\": \"%s\", \"args\":[",
                     normalize_syscall_name(meta->name));
-
-    for (int j = 0; j < meta->nb_args && x > 0 && x < PAGE_SIZE; j++) {
+    for (j = 0; j < meta->nb_args && x > 0 && x < PAGE_SIZE; j++) {
         // Append args safely, checking remaining buffer space
         x += snprintf((char*)buffer + x, PAGE_SIZE - x, "[\"%s\", \"%s\"]%s",
                       meta->types[j] ? meta->types[j] : "?", // Handle potential NULL type/arg names
@@ -207,27 +207,29 @@ static void report_syscall_from_func(char *buffer, void *func_ptr, int syscall_n
 }
 #endif
 
-int syscalls_info_report(void) {
-    printk(KERN_EMERG "IGLOO: Initializing syscall hypercalls\n");
-    struct syscall_metadata **p = __start_syscalls_metadata;
-    struct syscall_metadata **end = __stop_syscalls_metadata;
-
-    void *buffer = kzalloc(PAGE_SIZE, GFP_KERNEL);
+int __init syscalls_info_report(void) {
+    struct syscall_metadata **p, **end; // Fix declaration
+    int num_syscall_probes, i;          // Move declarations to top
+    void *buffer;
     
+    p = __start_syscalls_metadata;
+    end = __stop_syscalls_metadata;
+    
+    buffer = kzalloc(PAGE_SIZE, GFP_KERNEL);
+
     if (!buffer) {
         printk(KERN_ERR "IGLOO: Failed to allocate memory for syscall metadata buffer\n");
         return -ENOMEM;
     }
 
     // Count the number of syscalls
-    int num_syscall_probes = end - p;
+    num_syscall_probes = end - p;
     if (num_syscall_probes <= 0) {
         printk(KERN_WARNING "IGLOO: No syscall metadata found.\n");
         return -EINVAL;
     }
 
     // Process regular syscalls first
-    int i;
     for (i = 0; i < NR_syscalls+1000; i++) {
         struct syscall_metadata *meta;
         unsigned long addr;
