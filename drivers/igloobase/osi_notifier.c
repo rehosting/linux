@@ -34,8 +34,13 @@
 #define IGLOO_HYP_OSI_TASK_SWITCH 0x3337
 
 // Define a tracepoint probe function for sched_switch with the correct signature
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,18,0)
 static void probe_sched_switch(void *data, bool preempt, struct task_struct *prev, 
                                struct task_struct *next, unsigned int prev_state)
+#else
+static void probe_sched_switch(void *data, bool preempt, struct task_struct *prev, 
+                               struct task_struct *next)
+#endif
 {
     // Notify hypervisor about task switch using task pointers
     igloo_hypercall2(IGLOO_HYP_OSI_TASK_SWITCH, (unsigned long)prev, (unsigned long)next);
