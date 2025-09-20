@@ -7,8 +7,8 @@
 
 /* Register probes for mmap and munmap */
 static int __init igloo_base_init(void) {
+	int ret;
 	printk(KERN_EMERG "IGLOOBase: Initializing\n");
-	int ret = 0;
     if ((ret = osi_notifier_init()) != 0) {
         printk(KERN_ERR "Failed to register osi_notifier_init\n");
     }
