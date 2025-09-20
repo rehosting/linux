@@ -1392,8 +1392,10 @@ out:
 	return err;
 }
 
+#ifdef CONFIG_IGLOO
 // forward declare igloo_sock_bind
 void igloo_sock_bind(struct socket *sock, struct sockaddr_storage *address);
+#endif
 
 /*
  *	Bind a name to a socket. Nothing much to do here since it's
@@ -1420,7 +1422,9 @@ SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
 				err = sock->ops->bind(sock,
 						      (struct sockaddr *)
 						      &address, addrlen);
-				igloo_sock_bind(sock, address);
+				#ifdef CONFIG_IGLOO
+				igloo_sock_bind(sock, &address);
+				#endif
 			}
 		}
 		fput_light(sock->file, fput_needed);
