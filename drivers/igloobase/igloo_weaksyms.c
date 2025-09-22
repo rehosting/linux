@@ -75,12 +75,12 @@ void igloo_hc_open(int dfd, const char __user *filename, struct open_how *how)
 }
 EXPORT_SYMBOL(igloo_hc_open);
 
-void (*igloo_ioctl_module)(int error, struct inode *inode, struct file *filp, unsigned int cmd, void __user *argp);
+void (*igloo_ioctl_module)(int error, struct file *filp, unsigned int cmd);
 void igloo_ioctl(int error, struct inode *inode, struct file *filp, unsigned int cmd, void __user *argp);
 void igloo_ioctl(int error, struct inode *inode, struct file *filp, unsigned int cmd, void __user *argp)
 {
     if (igloo_ioctl_module) {
-        igloo_ioctl_module(error, inode, filp, cmd, argp);
+        igloo_ioctl_module(error, filp, cmd);
     } else {
         // printk(KERN_EMERG "igloo_ioctl: unimplemented\n");
     }
