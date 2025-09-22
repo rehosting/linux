@@ -121,9 +121,16 @@ static void report_syscall(char * buffer, struct syscall_metadata *meta){
 #ifdef CONFIG_COMPAT
 /* For ARM64 */
 #if defined(CONFIG_ARM64)
+#ifndef syscall_fn_t
+typedef void* syscall_fn_t;
+#endif
 extern const syscall_fn_t compat_sys_call_table[];
 /* Don't redeclare sys_call_table as it's already in syscall.h with correct type */
+#ifdef __NR_compat32_syscalls
 #define COMPAT_TABLE_SIZE __NR_compat32_syscalls
+#else
+#define COMPAT_TABLE_SIZE __NR_compat_syscalls
+#endif
 
 /* For x86_64 */
 // #elif defined(CONFIG_X86_64)
