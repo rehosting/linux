@@ -194,7 +194,7 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 	static inline long __do_sys_##sname(void);												   \
 	asmlinkage long sys_##sname(void)                                                          \
 	{                                                                                          \
-		const char *syscall_basename = __stringify(name); /* Base name */                      \
+		const char *syscall_basename = __stringify(sname); /* Base name */                      \
 		long ret;                                                                              \
 		bool skip = false;                                                                     \
 		long skip_ret = 0;                                                                     \
