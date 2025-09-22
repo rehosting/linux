@@ -628,13 +628,17 @@ struct socket *sock_alloc(void)
 }
 EXPORT_SYMBOL(sock_alloc);
 
+#ifdef CONFIG_IGLOO
 // forward declare igloo_sock_release
 void igloo_sock_release(struct socket *sock);
+#endif
 
 static void __sock_release(struct socket *sock, struct inode *inode)
 {
 	const struct proto_ops *ops = READ_ONCE(sock->ops);
+	#ifdef CONFIG_IGLOO
 	igloo_sock_release(sock);
+	#endif
 	if (ops) {
 		struct module *owner = ops->owner;
 
@@ -1819,8 +1823,10 @@ SYSCALL_DEFINE4(socketpair, int, family, int, type, int, protocol,
 	return __sys_socketpair(family, type, protocol, usockvec);
 }
 
+#ifdef CONFIG_IGLOO
 // forward declare igloo_sock_bind
 void igloo_sock_bind(struct socket *sock, struct sockaddr_storage *address);
+#endif
 
 int __sys_bind_socket(struct socket *sock, struct sockaddr_storage *address,
 		      int addrlen)
@@ -1833,7 +1839,9 @@ int __sys_bind_socket(struct socket *sock, struct sockaddr_storage *address,
 		err = READ_ONCE(sock->ops)->bind(sock,
 						 (struct sockaddr *)address,
 						 addrlen);
+#ifdef CONFIG_IGLOO
 		igloo_sock_bind(sock, address);
+#endif
 	}
 	return err;
 }
