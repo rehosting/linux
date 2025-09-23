@@ -53,6 +53,7 @@ extern igloo_syscall_return_t igloo_syscall_return_hook;
 
 #ifndef COMPAT_SYSCALL_DEFINE0
 #define COMPAT_SYSCALL_DEFINE0(name) \
+	static inline long __do_compat_sys_##name(void); \
 	asmlinkage long compat_sys_##name(void); \
 	ALLOW_ERROR_INJECTION(compat_sys_##name, ERRNO); \
 	asmlinkage long compat_sys_##name(void)	\
