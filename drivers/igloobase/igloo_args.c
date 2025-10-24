@@ -75,14 +75,14 @@ static int __init early_igloo_debug_modules(char *p)
     // Special case: "all" enables all modules
     if (!strcmp(p, "all")) {
         memset(&igloo_debug, 1, sizeof(igloo_debug));
-        pr_warn_once("IGLOO: Debug enabled for all modules\n");
+        pr_emerg_once("IGLOO: Debug enabled for all modules\n");
         return 0;
     }
 
     // Special case: "none" disables all modules (default)
     if (!strcmp(p, "none")) {
         memset(&igloo_debug, 0, sizeof(igloo_debug));
-        pr_warn_once("IGLOO: Debug disabled for all modules\n");
+        pr_emerg_once("IGLOO: Debug disabled for all modules\n");
         return 0;
     }
 
@@ -100,14 +100,14 @@ static int __init early_igloo_debug_modules(char *p)
             igloo_debug.osi = true;
         else if (!strcmp(token, "all")){
             memset(&igloo_debug, 1, sizeof(igloo_debug));
-            pr_warn_once("IGLOO: Debug enabled for all modules\n");
+            pr_emerg_once("IGLOO: Debug enabled for all modules\n");
             return 0;
         }
         else
-            pr_warn("IGLOO: Unknown debug module: %s\n", token);
+            pr_emerg("IGLOO: Unknown debug module: %s\n", token);
     }
 
-    pr_warn_once("IGLOO: Debug modules - portal:%d uprobe:%d vma:%d syscall:%d osi:%d\n",
+    pr_emerg_once("IGLOO: Debug modules - portal:%d uprobe:%d vma:%d syscall:%d osi:%d\n",
                igloo_debug.portal, igloo_debug.uprobe, igloo_debug.vma,
                igloo_debug.syscall, igloo_debug.osi);
 
