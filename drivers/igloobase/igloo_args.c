@@ -19,11 +19,11 @@ static int __init early_igloo_task_size(char *p)
 {
     unsigned long task_size;
     if (kstrtoul(p, 0, &task_size) < 0 ) {
-        pr_warn("Could not parse igloo_task_size parameter %s\n", p);
+        pr_emerg("Could not parse igloo_task_size parameter %s\n", p);
         return -1;
     }
     igloo_task_size = task_size;
-    pr_warn_once("Using igloo_task_size: 0x%lx\n", igloo_task_size);
+    pr_emerg_once("Using igloo_task_size: 0x%lx\n", igloo_task_size);
     return 0;
 }
 early_param("igloo_task_size", early_igloo_task_size);
@@ -35,11 +35,11 @@ static int __init early_igloo_block_halt(char *p)
 {
     unsigned long block_halt;
     if (kstrtoul(p, 0, &block_halt) < 0 ) {
-        pr_warn("Could not parse igloo_block_halt parameter %s. Set to 0 (default) or 1\n", p);
+        pr_emerg("Could not parse igloo_block_halt parameter %s. Set to 0 (default) or 1\n", p);
         return -1;
     }
     igloo_block_halt = (block_halt > 0);
-    pr_warn_once("Using igloo_block_halt: %d\n", igloo_block_halt);
+    pr_emerg_once("Using igloo_block_halt: %d\n", igloo_block_halt);
     return 0;
 }
 
@@ -75,14 +75,14 @@ static int __init early_igloo_debug_modules(char *p)
     // Special case: "all" enables all modules
     if (!strcmp(p, "all")) {
         memset(&igloo_debug, 1, sizeof(igloo_debug));
-        pr_warn_once("IGLOO: Debug enabled for all modules\n");
+        pr_emerg_once("IGLOO: Debug enabled for all modules\n");
         return 0;
     }
 
     // Special case: "none" disables all modules (default)
     if (!strcmp(p, "none")) {
         memset(&igloo_debug, 0, sizeof(igloo_debug));
-        pr_warn_once("IGLOO: Debug disabled for all modules\n");
+        pr_emerg_once("IGLOO: Debug disabled for all modules\n");
         return 0;
     }
 
@@ -100,14 +100,14 @@ static int __init early_igloo_debug_modules(char *p)
             igloo_debug.osi = true;
         else if (!strcmp(token, "all")){
             memset(&igloo_debug, 1, sizeof(igloo_debug));
-            pr_warn_once("IGLOO: Debug enabled for all modules\n");
+            pr_emerg_once("IGLOO: Debug enabled for all modules\n");
             return 0;
         }
         else
-            pr_warn("IGLOO: Unknown debug module: %s\n", token);
+            pr_emerg("IGLOO: Unknown debug module: %s\n", token);
     }
 
-    pr_warn_once("IGLOO: Debug modules - portal:%d uprobe:%d vma:%d syscall:%d osi:%d\n",
+    pr_emerg_once("IGLOO: Debug modules - portal:%d uprobe:%d vma:%d syscall:%d osi:%d\n",
                igloo_debug.portal, igloo_debug.uprobe, igloo_debug.vma,
                igloo_debug.syscall, igloo_debug.osi);
 
