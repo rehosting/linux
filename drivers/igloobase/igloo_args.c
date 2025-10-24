@@ -75,6 +75,8 @@ static int __init early_igloo_debug_modules(char *p)
     // Special case: "all" enables all modules
     if (!strcmp(p, "all")) {
         memset(&igloo_debug, 1, sizeof(igloo_debug));
+        console_loglevel = 8;
+        printk(KERN_EMERG "IGLOO: Debug enabled for all modules, bumping console_loglevel to 8\n");
         pr_warn_once("IGLOO: Debug enabled for all modules\n");
         return 0;
     }
@@ -100,6 +102,8 @@ static int __init early_igloo_debug_modules(char *p)
             igloo_debug.osi = true;
         else if (!strcmp(token, "all")){
             memset(&igloo_debug, 1, sizeof(igloo_debug));
+            console_loglevel = 8;
+            printk(KERN_EMERG "IGLOO: Debug enabled for all modules, bumping console_loglevel to 8\n");
             pr_warn_once("IGLOO: Debug enabled for all modules\n");
             return 0;
         }
@@ -107,7 +111,17 @@ static int __init early_igloo_debug_modules(char *p)
             pr_warn("IGLOO: Unknown debug module: %s\n", token);
     }
 
-    pr_warn_once("IGLOO: Debug modules - portal:%d uprobe:%d vma:%d syscall:%d osi:%d\n",
+    // Check if any debug module is enabled and bump console log level if so
+    if (igloo_debug.portal || igloo_debug.uprobe || igloo_debug.vma ||
+        igloo_debug.syscall || igloo_debug.osi) {
+        if (console_loglevel < 7) {
+            // This will get overriden if `quiet` or something is processed later
+            console_loglevel = 7;
+        }
+        printk(KERN_EMERG "IGLOO: Debug enabled, bumping console_loglevel to 8\n");
+    }
+
+    pr_warn("IGLOO: Debug modules - portal:%d uprobe:%d vma:%d syscall:%d osi:%d\n",
                igloo_debug.portal, igloo_debug.uprobe, igloo_debug.vma,
                igloo_debug.syscall, igloo_debug.osi);
 
@@ -116,3 +130,23 @@ static int __init early_igloo_debug_modules(char *p)
 
 early_param("igloo_debug", early_igloo_debug_modules);
 EXPORT_SYMBOL(igloo_debug);
+
+// Force console log level after all boot parameters are processed
+static int __init igloo_force_loglevel(void)
+{
+    if (igloo_debug.portal || igloo_debug.uprobe || igloo_debug.vma ||
+        igloo_debug.syscall || igloo_debug.osi) {
+
+        // The igloo_debug_ macros all do pr_info, so we need at least level 7
+        if (console_loglevel < 7) {
+            console_loglevel = 7;
+            printk(KERN_EMERG "IGLOO: Late init - bumping console_loglevel to %d for debug\n", console_loglevel);
+        }
+
+        pr_info("IGLOO: Debug modules active - portal:%d uprobe:%d vma:%d syscall:%d osi:%d\n",
+                igloo_debug.portal, igloo_debug.uprobe, igloo_debug.vma,
+                igloo_debug.syscall, igloo_debug.osi);
+    }
+    return 0;
+}
+late_initcall(igloo_force_loglevel);
