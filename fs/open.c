@@ -1401,9 +1401,6 @@ static long do_sys_openat2(int dfd, const char __user *filename,
 	tmp = getname(filename);
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
-	#ifdef CONFIG_IGLOO
-	igloo_hc_open(dfd, tmp, fd);
-	#endif
 	fd = get_unused_fd_flags(how->flags);
 	if (fd >= 0) {
 		struct file *f = do_filp_open(dfd, tmp, &op);
@@ -1414,6 +1411,11 @@ static long do_sys_openat2(int dfd, const char __user *filename,
 			fd_install(fd, f);
 		}
 	}
+
+	#ifdef CONFIG_IGLOO
+	igloo_hc_open(dfd, tmp, fd);
+	#endif
+
 	putname(tmp);
 	return fd;
 }
