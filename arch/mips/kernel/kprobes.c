@@ -25,6 +25,72 @@
 
 #include "probes-common.h"
 
+/* BEGIN IGLOO PATCH - we were hitting aliasing issues on mips */
+#include <linux/mm.h>
+#include <asm/addrspace.h>
+#include <asm/pgtable.h>
+
+static __always_inline phys_addr_t igloo_va_to_phys_kernel(unsigned long va)
+{
+	pgd_t *pgd;
+	p4d_t *p4d;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	/* Fast path for direct-mapped segments */
+	if (va >= CKSEG0 && va < CKSEG2)
+		return CPHYSADDR(va);
+
+	/* Only try to walk kernel page tables for mapped kernel addresses */
+	if (va < CKSEG2)
+		return 0;
+
+	pgd = pgd_offset_k(va);
+	if (pgd_none(*pgd) || pgd_bad(*pgd))
+		return 0;
+
+	p4d = p4d_offset(pgd, va);
+	if (p4d_none(*p4d) || p4d_bad(*p4d))
+		return 0;
+
+	pud = pud_offset(p4d, va);
+	if (pud_none(*pud) || pud_bad(*pud))
+		return 0;
+
+	pmd = pmd_offset(pud, va);
+	if (pmd_none(*pmd) || pmd_bad(*pmd))
+		return 0;
+
+	pte = pte_offset_kernel(pmd, va);
+	if (!pte || !pte_present(*pte))
+		return 0;
+
+	return ((phys_addr_t)pte_pfn(*pte) << PAGE_SHIFT) | (va & (PAGE_SIZE - 1));
+}
+
+static __always_inline kprobe_opcode_t *kprobe_canonical_addr(kprobe_opcode_t *addr)
+{
+	unsigned long va = (unsigned long)addr;
+	phys_addr_t phys;
+
+	if (!va)
+		return addr;
+
+	/* Already direct mapped */
+	if (va >= CKSEG0 && va < CKSEG2)
+		return addr;
+
+	phys = igloo_va_to_phys_kernel(va);
+	if (!phys)
+		return addr;
+
+	return (kprobe_opcode_t *)CKSEG0ADDR(phys);
+}
+
+/* END IGLOO PATCH */
+
+
 static const union mips_instruction breakpoint_insn = {
 	.b_format = {
 		.opcode = spec_op,
@@ -284,6 +350,14 @@ static int kprobe_handler(struct pt_regs *regs)
 	struct kprobe_ctlblk *kcb;
 
 	addr = (kprobe_opcode_t *) regs->cp0_epc;
+	/*
+	*IGLOO PATCH - use canonical addr instead of EPC
+	* sometimes we ended up with EPC in KSEG2 but probe was KSEG0
+	* TODO: weirdness around branch delay slots?
+	*
+	*/
+	addr = kprobe_canonical_addr(addr);
+
 
 	/*
 	 * We don't want to be preempted for the entire
