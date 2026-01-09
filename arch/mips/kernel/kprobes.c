@@ -25,72 +25,6 @@
 
 #include "probes-common.h"
 
-/* BEGIN IGLOO PATCH - we were hitting aliasing issues on mips */
-#include <linux/mm.h>
-#include <asm/addrspace.h>
-#include <asm/pgtable.h>
-
-static __always_inline phys_addr_t igloo_va_to_phys_kernel(unsigned long va)
-{
-	pgd_t *pgd;
-	p4d_t *p4d;
-	pud_t *pud;
-	pmd_t *pmd;
-	pte_t *pte;
-
-	/* Fast path for direct-mapped segments */
-	if (va >= CKSEG0 && va < CKSEG2)
-		return CPHYSADDR(va);
-
-	/* Only try to walk kernel page tables for mapped kernel addresses */
-	if (va < CKSEG2)
-		return 0;
-
-	pgd = pgd_offset_k(va);
-	if (pgd_none(*pgd) || pgd_bad(*pgd))
-		return 0;
-
-	p4d = p4d_offset(pgd, va);
-	if (p4d_none(*p4d) || p4d_bad(*p4d))
-		return 0;
-
-	pud = pud_offset(p4d, va);
-	if (pud_none(*pud) || pud_bad(*pud))
-		return 0;
-
-	pmd = pmd_offset(pud, va);
-	if (pmd_none(*pmd) || pmd_bad(*pmd))
-		return 0;
-
-	pte = pte_offset_kernel(pmd, va);
-	if (!pte || !pte_present(*pte))
-		return 0;
-
-	return ((phys_addr_t)pte_pfn(*pte) << PAGE_SHIFT) | (va & (PAGE_SIZE - 1));
-}
-
-static __always_inline kprobe_opcode_t *kprobe_canonical_addr(kprobe_opcode_t *addr)
-{
-	unsigned long va = (unsigned long)addr;
-	phys_addr_t phys;
-
-	if (!va)
-		return addr;
-
-	/* Already direct mapped */
-	if (va >= CKSEG0 && va < CKSEG2)
-		return addr;
-
-	phys = igloo_va_to_phys_kernel(va);
-	if (!phys)
-		return addr;
-
-	return (kprobe_opcode_t *)CKSEG0ADDR(phys);
-}
-
-/* END IGLOO PATCH */
-
-
 static const union mips_instruction breakpoint_insn = {
 	.b_format = {
 		.opcode = spec_op,
@@ -115,6 +49,58 @@ static int insn_has_delayslot(union mips_instruction insn)
 	return __insn_has_delay_slot(insn);
 }
 NOKPROBE_SYMBOL(insn_has_delayslot);
+
+/* BEGIN IGLOO PATCH */
+// We had aliasing between KSEG0 and KSEG2 addresses for kprobes
+#include <asm/addrspace.h>
+
+static __always_inline kprobe_opcode_t *kprobe_kseg_alias(kprobe_opcode_t *addr)
+{
+    unsigned long a = (unsigned long)addr;
+
+    /* CKSEG0 <-> CKSEG2 only */
+    if (a >= CKSEG0 && a < CKSEG1)
+        return (kprobe_opcode_t *)(a + (CKSEG2 - CKSEG0));
+
+    if (a >= CKSEG2)
+        return (kprobe_opcode_t *)(a - (CKSEG2 - CKSEG0));
+
+    return NULL;
+}
+
+static __always_inline struct kprobe *get_kprobe_mips_aliased(kprobe_opcode_t **paddr)
+{
+    struct kprobe *p;
+
+    /* First try exact address */
+    p = get_kprobe(*paddr);
+    if (p)
+        return p;
+
+	if (!p && (*paddr)->word == breakpoint_insn.word) {
+    kprobe_opcode_t *alt = kprobe_kseg_alias(*paddr);
+    if (alt)
+        pr_info("kprobes: alias lookup %08lx -> %08lx\n",
+                (unsigned long)*paddr, (unsigned long)alt);
+	}
+    /*
+     * CRITICAL: Only attempt aliasing for the *main* kprobe breakpoint.
+     * Never alias for the single-step breakpoint or random breaks (e.g. insn slots).
+     */
+    if ((*paddr)->word != breakpoint_insn.word)
+        return NULL;
+
+    kprobe_opcode_t *alt = kprobe_kseg_alias(*paddr);
+    if (!alt)
+        return NULL;
+
+    p = get_kprobe(alt);
+    if (p)
+        *paddr = alt;
+
+    return p;
+}
+/* END IGLOO PATCH */
 
 /*
  * insn_has_ll_or_sc function checks whether instruction is ll or sc
@@ -356,7 +342,12 @@ static int kprobe_handler(struct pt_regs *regs)
 	* TODO: weirdness around branch delay slots?
 	*
 	*/
-	addr = kprobe_canonical_addr(addr);
+	unsigned long epc = regs->cp0_epc;
+	if (read_c0_cause() & CAUSEF_BD)
+		epc += 4;
+	addr = (kprobe_opcode_t *)epc;
+
+	/* END IGLOO PATCH */
 
 
 	/*
@@ -368,10 +359,13 @@ static int kprobe_handler(struct pt_regs *regs)
 
 	/* Check we're not actually recursing */
 	if (kprobe_running()) {
-		p = get_kprobe(addr);
+		/* BEGIN IGLOO PATCH*/
+		kprobe_opcode_t *orig_addr = addr;
+		p = get_kprobe_mips_aliased(&addr);
+		/* END IGLOO PATCH*/
 		if (p) {
 			if (kcb->kprobe_status == KPROBE_HIT_SS &&
-			    p->ainsn.insn->word == breakpoint_insn.word) {
+				p->ainsn.insn->word == breakpoint_insn.word) {
 				regs->cp0_status &= ~ST0_IE;
 				regs->cp0_status |= kcb->kprobe_saved_SR;
 				goto no_kprobe;
@@ -405,9 +399,12 @@ static int kprobe_handler(struct pt_regs *regs)
 		goto no_kprobe;
 	}
 
-	p = get_kprobe(addr);
+	/* BEGIN IGLOO PATCH*/
+	kprobe_opcode_t *orig_addr = addr;
+	p = get_kprobe_mips_aliased(&addr);
 	if (!p) {
-		if (addr->word != breakpoint_insn.word) {
+		if (orig_addr->word != breakpoint_insn.word) {
+	/* END IGLOO PATCH*/
 			/*
 			 * The breakpoint instruction was removed right
 			 * after we hit it.  Another cpu has removed
@@ -583,7 +580,6 @@ int arch_trampoline_kprobe(struct kprobe *p)
 {
 	if (p->addr == (kprobe_opcode_t *)__kretprobe_trampoline)
 		return 1;
-
 	return 0;
 }
 NOKPROBE_SYMBOL(arch_trampoline_kprobe);
@@ -593,7 +589,10 @@ static struct kprobe trampoline_p = {
 	.pre_handler = trampoline_probe_handler
 };
 
+
 int __init arch_init_kprobes(void)
 {
+	pr_emerg("kprobes: breakpoint_insn.word=%08x breakpoint2_insn.word=%08x\n",
+        breakpoint_insn.word, breakpoint2_insn.word);
 	return register_kprobe(&trampoline_p);
 }
