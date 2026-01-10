@@ -435,8 +435,11 @@ static int kprobe_handler(struct pt_regs *regs)
 			p->post_handler(p, regs, 0);
 		resume_execution(p, regs, kcb);
 		preempt_enable_no_resched();
-	} else
+	} else {
+		pr_emerg("kprobes: set HIT_SS cur=%px slot0=%px slot1=%px\n",
+				p, &p->ainsn.insn[0], &p->ainsn.insn[1]);
 		kcb->kprobe_status = KPROBE_HIT_SS;
+	}
 
 	return 1;
 
@@ -452,8 +455,11 @@ static inline int post_kprobe_handler(struct pt_regs *regs)
 	struct kprobe *cur = kprobe_running();
 	struct kprobe_ctlblk *kcb = get_kprobe_ctlblk();
 
-	if (!cur)
+	if (!cur) {
+		pr_emerg("kprobes: SSTEPBP but no current_kprobe: epc=%08lx word=%08x status=%d\n",
+            regs->cp0_epc, *(u32 *)regs->cp0_epc, get_kprobe_ctlblk()->kprobe_status);
 		return 0;
+	}
 
 	if ((kcb->kprobe_status != KPROBE_REENTER) && cur->post_handler) {
 		kcb->kprobe_status = KPROBE_HIT_SSDONE;
