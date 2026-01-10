@@ -25,6 +25,63 @@
 
 #include "probes-common.h"
 
+/* BEGIN IGLOO PATCH */
+#include <linux/hashtable.h>
+#include <linux/spinlock.h>
+
+struct kprobe_slot_map {
+	struct hlist_node hnode;
+	unsigned long slot1;     /* &p->ainsn.insn[1] */
+	struct kprobe *kp;
+};
+
+static DEFINE_HASHTABLE(kprobe_slot_ht, 10); /* 1024 buckets */
+static DEFINE_SPINLOCK(kprobe_slot_lock);
+
+static void kprobe_slot_add(struct kprobe *p)
+{
+	struct kprobe_slot_map *e;
+
+	e = kmalloc(sizeof(*e), GFP_KERNEL); /* registration context, safe */
+	if (!e)
+		return;
+
+	e->slot1 = (unsigned long)&p->ainsn.insn[1];
+	e->kp = p;
+
+	spin_lock(&kprobe_slot_lock);
+	hash_add(kprobe_slot_ht, &e->hnode, e->slot1);
+	spin_unlock(&kprobe_slot_lock);
+}
+
+static void kprobe_slot_del(struct kprobe *p)
+{
+	unsigned long key = (unsigned long)&p->ainsn.insn[1];
+	struct kprobe_slot_map *e;
+
+	spin_lock(&kprobe_slot_lock);
+	hash_for_each_possible(kprobe_slot_ht, e, hnode, key) {
+		if (e->slot1 == key && e->kp == p) {
+			hash_del(&e->hnode);
+			kfree(e);
+			break;
+		}
+	}
+	spin_unlock(&kprobe_slot_lock);
+}
+
+static struct kprobe *kprobe_slot_lookup(unsigned long slot1)
+{
+	struct kprobe_slot_map *e;
+
+	hash_for_each_possible(kprobe_slot_ht, e, hnode, slot1) {
+		if (e->slot1 == slot1)
+			return e->kp;
+	}
+	return NULL;
+}
+/* END IGLOO PATCH */
+
 static const union mips_instruction breakpoint_insn = {
 	.b_format = {
 		.opcode = spec_op,
@@ -109,6 +166,7 @@ int arch_prepare_kprobe(struct kprobe *p)
 		ret = -ENOMEM;
 		goto out;
 	}
+	kprobe_slot_add(p); /* IGLOO PATCH  */
 
 	/*
 	 * In the kprobe->ainsn.insn[] array we store the original
@@ -153,6 +211,7 @@ NOKPROBE_SYMBOL(arch_disarm_kprobe);
 void arch_remove_kprobe(struct kprobe *p)
 {
 	if (p->ainsn.insn) {
+		kprobe_slot_del(p); /* IGLOO PATCH  */
 		free_insn_slot(p->ainsn.insn, 0);
 		p->ainsn.insn = NULL;
 	}
@@ -381,8 +440,30 @@ static inline int post_kprobe_handler(struct pt_regs *regs)
 	struct kprobe *cur = kprobe_running();
 	struct kprobe_ctlblk *kcb = get_kprobe_ctlblk();
 
-	if (!cur)
-		return 0;
+	/* BEGIN IGLOO PATCH
+	* // Replaces this:
+	* if (!cur)
+	*	return 0;
+	*
+	*/
+	if (!cur) {
+		/* Recover probe from slot1 address (SSTEPBP happens at &ainsn[1]) */
+		struct kprobe *p = kprobe_slot_lookup(regs->cp0_epc);
+		if (p) {
+			__this_cpu_write(current_kprobe, p);
+			cur = p;
+
+			/*
+			 * Make sure status is consistent for resume_execution().
+			 * We were in SS mode anyway per your logs.
+			 */
+			if (!(kcb->kprobe_status & KPROBE_HIT_SS))
+				kcb->kprobe_status = KPROBE_HIT_SS;
+		} else {
+			return 0; /* truly not ours */
+		}
+	}
+	/* END IGLOO PATCH */
 
 	if ((kcb->kprobe_status != KPROBE_REENTER) && cur->post_handler) {
 		kcb->kprobe_status = KPROBE_HIT_SSDONE;
