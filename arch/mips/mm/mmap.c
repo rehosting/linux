@@ -14,6 +14,9 @@
 #include <linux/personality.h>
 #include <linux/random.h>
 #include <linux/sched.h>
+#ifdef CONFIG_IGLOO
+#include <igloo.h>
+#endif
 
 unsigned long shm_align_mask = PAGE_SIZE - 1;	/* Sane caches */
 EXPORT_SYMBOL(shm_align_mask);
@@ -36,13 +39,19 @@ static int mmap_is_legacy(void)
 static unsigned long mmap_base(unsigned long rnd)
 {
 	unsigned long gap = rlimit(RLIMIT_STACK);
+	unsigned long task_size = TASK_SIZE;
+
+#ifdef CONFIG_IGLOO
+	if (igloo_task_size)
+		task_size = igloo_task_size;
+#endif
 
 	if (gap < MIN_GAP)
 		gap = MIN_GAP;
 	else if (gap > MAX_GAP)
 		gap = MAX_GAP;
 
-	return PAGE_ALIGN(TASK_SIZE - gap - rnd);
+	return PAGE_ALIGN(task_size - gap - rnd);
 }
 
 #define COLOUR_ALIGN(addr, pgoff)				\
@@ -60,13 +69,19 @@ static unsigned long arch_get_unmapped_area_common(struct file *filp,
 	unsigned long addr = addr0;
 	int do_color_align;
 	struct vm_unmapped_area_info info;
+	unsigned long task_size = TASK_SIZE;
 
-	if (unlikely(len > TASK_SIZE))
+#ifdef CONFIG_IGLOO
+	if (igloo_task_size)
+		task_size = igloo_task_size;
+#endif
+
+	if (unlikely(len > task_size))
 		return -ENOMEM;
 
 	if (flags & MAP_FIXED) {
 		/* Even MAP_FIXED mappings must reside within TASK_SIZE */
-		if (TASK_SIZE - len < addr)
+		if (task_size - len < addr)
 			return -EINVAL;
 
 		/*
@@ -91,7 +106,7 @@ static unsigned long arch_get_unmapped_area_common(struct file *filp,
 			addr = PAGE_ALIGN(addr);
 
 		vma = find_vma(mm, addr);
-		if (TASK_SIZE - len >= addr &&
+		if (task_size - len >= addr &&
 		    (!vma || addr + len <= vma->vm_start))
 			return addr;
 	}
@@ -119,7 +134,7 @@ static unsigned long arch_get_unmapped_area_common(struct file *filp,
 
 	info.flags = 0;
 	info.low_limit = mm->mmap_base;
-	info.high_limit = TASK_SIZE;
+	info.high_limit = task_size;
 	return vm_unmapped_area(&info);
 }
 

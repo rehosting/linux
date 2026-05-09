@@ -26,6 +26,9 @@
 #include <linux/io.h>
 #include <linux/personality.h>
 #include <linux/random.h>
+#ifdef CONFIG_IGLOO
+#include <igloo.h>
+#endif
 
 #include <asm/cputype.h>
 
@@ -63,13 +66,19 @@ unsigned long arch_mmap_rnd(void)
 static unsigned long mmap_base(unsigned long rnd)
 {
 	unsigned long gap = rlimit(RLIMIT_STACK);
+	unsigned long stack_top = STACK_TOP;
+
+#ifdef CONFIG_IGLOO
+	if (igloo_task_size)
+		stack_top = igloo_task_size;
+#endif
 
 	if (gap < MIN_GAP)
 		gap = MIN_GAP;
 	else if (gap > MAX_GAP)
 		gap = MAX_GAP;
 
-	return PAGE_ALIGN(STACK_TOP - gap - rnd);
+	return PAGE_ALIGN(stack_top - gap - rnd);
 }
 
 /*

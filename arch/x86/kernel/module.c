@@ -199,6 +199,8 @@ int apply_relocate_add(Elf64_Shdr *sechdrs,
 	}
 	return 0;
 
+invalid_relocation:
+	return -ENOEXEC;
 overflow:
 	pr_err("overflow in relocation type %d val %Lx\n",
 	       (int)ELF64_R_TYPE(rel[i].r_info), val);

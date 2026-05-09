@@ -29,6 +29,9 @@
 #include <linux/elf-randomize.h>
 #include <linux/security.h>
 #include <linux/mman.h>
+#ifdef CONFIG_IGLOO
+#include <igloo.h>
+#endif
 
 /*
  * Top of mmap area (just below the process stack).
@@ -72,13 +75,19 @@ unsigned long arch_mmap_rnd(void)
 static inline unsigned long mmap_base(unsigned long rnd)
 {
 	unsigned long gap = rlimit(RLIMIT_STACK);
+	unsigned long task_size = TASK_SIZE;
+
+#ifdef CONFIG_IGLOO
+	if (igloo_task_size)
+		task_size = igloo_task_size;
+#endif
 
 	if (gap < MIN_GAP)
 		gap = MIN_GAP;
 	else if (gap > MAX_GAP)
 		gap = MAX_GAP;
 
-	return PAGE_ALIGN(TASK_SIZE - gap - rnd);
+	return PAGE_ALIGN(task_size - gap - rnd);
 }
 
 #ifdef CONFIG_PPC_RADIX_MMU
@@ -95,8 +104,14 @@ radix__arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 	struct vm_unmapped_area_info info;
+	unsigned long task_size = TASK_SIZE;
 
-	if (len > TASK_SIZE - mmap_min_addr)
+#ifdef CONFIG_IGLOO
+	if (igloo_task_size)
+		task_size = igloo_task_size;
+#endif
+
+	if (len > task_size - mmap_min_addr)
 		return -ENOMEM;
 
 	if (flags & MAP_FIXED)
@@ -105,7 +120,7 @@ radix__arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	if (addr) {
 		addr = PAGE_ALIGN(addr);
 		vma = find_vma(mm, addr);
-		if (TASK_SIZE - len >= addr && addr >= mmap_min_addr &&
+		if (task_size - len >= addr && addr >= mmap_min_addr &&
 		    (!vma || addr + len <= vma->vm_start))
 			return addr;
 	}
@@ -113,7 +128,7 @@ radix__arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	info.flags = 0;
 	info.length = len;
 	info.low_limit = mm->mmap_base;
-	info.high_limit = TASK_SIZE;
+	info.high_limit = task_size;
 	info.align_mask = 0;
 	return vm_unmapped_area(&info);
 }
@@ -129,9 +144,15 @@ radix__arch_get_unmapped_area_topdown(struct file *filp,
 	struct mm_struct *mm = current->mm;
 	unsigned long addr = addr0;
 	struct vm_unmapped_area_info info;
+	unsigned long task_size = TASK_SIZE;
+
+#ifdef CONFIG_IGLOO
+	if (igloo_task_size)
+		task_size = igloo_task_size;
+#endif
 
 	/* requested length too big for entire address space */
-	if (len > TASK_SIZE - mmap_min_addr)
+	if (len > task_size - mmap_min_addr)
 		return -ENOMEM;
 
 	if (flags & MAP_FIXED)
@@ -141,7 +162,7 @@ radix__arch_get_unmapped_area_topdown(struct file *filp,
 	if (addr) {
 		addr = PAGE_ALIGN(addr);
 		vma = find_vma(mm, addr);
-		if (TASK_SIZE - len >= addr && addr >= mmap_min_addr &&
+		if (task_size - len >= addr && addr >= mmap_min_addr &&
 				(!vma || addr + len <= vma->vm_start))
 			return addr;
 	}
@@ -163,7 +184,7 @@ radix__arch_get_unmapped_area_topdown(struct file *filp,
 		VM_BUG_ON(addr != -ENOMEM);
 		info.flags = 0;
 		info.low_limit = TASK_UNMAPPED_BASE;
-		info.high_limit = TASK_SIZE;
+		info.high_limit = task_size;
 		addr = vm_unmapped_area(&info);
 	}
 
