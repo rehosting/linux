@@ -8,6 +8,9 @@
 #include <linux/memblock.h>
 #include <linux/mm.h>
 #include <linux/mman.h>
+#ifdef CONFIG_IGLOO
+#include <igloo.h>
+#endif
 
 #define SHM_ALIGN_MASK	(SHMLBA - 1)
 
@@ -26,13 +29,19 @@ static unsigned long arch_get_unmapped_area_common(struct file *filp,
 	unsigned long addr = addr0;
 	int do_color_align;
 	struct vm_unmapped_area_info info = {};
+	unsigned long task_size = TASK_SIZE;
 
-	if (unlikely(len > TASK_SIZE))
+#ifdef CONFIG_IGLOO
+	if (igloo_task_size)
+		task_size = igloo_task_size;
+#endif
+
+	if (unlikely(len > task_size))
 		return -ENOMEM;
 
 	if (flags & MAP_FIXED) {
 		/* Even MAP_FIXED mappings must reside within TASK_SIZE */
-		if (TASK_SIZE - len < addr)
+		if (task_size - len < addr)
 			return -EINVAL;
 
 		/*
@@ -57,7 +66,7 @@ static unsigned long arch_get_unmapped_area_common(struct file *filp,
 			addr = PAGE_ALIGN(addr);
 
 		vma = find_vma(mm, addr);
-		if (TASK_SIZE - len >= addr &&
+		if (task_size - len >= addr &&
 		    (!vma || addr + len <= vm_start_gap(vma)))
 			return addr;
 	}
@@ -84,7 +93,7 @@ static unsigned long arch_get_unmapped_area_common(struct file *filp,
 	}
 
 	info.low_limit = mm->mmap_base;
-	info.high_limit = TASK_SIZE;
+	info.high_limit = task_size;
 	return vm_unmapped_area(&info);
 }
 

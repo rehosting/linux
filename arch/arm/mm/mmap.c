@@ -12,6 +12,9 @@
 #include <linux/personality.h>
 #include <linux/random.h>
 #include <asm/cachetype.h>
+#ifdef CONFIG_IGLOO
+#include <igloo.h>
+#endif
 
 #define COLOUR_ALIGN(addr,pgoff)		\
 	((((addr)+SHMLBA-1)&~(SHMLBA-1)) +	\
@@ -36,6 +39,12 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	int do_align = 0;
 	int aliasing = cache_is_vipt_aliasing();
 	struct vm_unmapped_area_info info = {};
+	unsigned long task_size = TASK_SIZE;
+
+#ifdef CONFIG_IGLOO
+	if (igloo_task_size)
+		task_size = igloo_task_size;
+#endif
 
 	/*
 	 * We only need to do colour alignment if either the I or D
@@ -54,7 +63,7 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 		return addr;
 	}
 
-	if (len > TASK_SIZE)
+	if (len > task_size)
 		return -ENOMEM;
 
 	if (addr) {
@@ -64,14 +73,14 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 			addr = PAGE_ALIGN(addr);
 
 		vma = find_vma(mm, addr);
-		if (TASK_SIZE - len >= addr &&
+		if (task_size - len >= addr &&
 		    (!vma || addr + len <= vm_start_gap(vma)))
 			return addr;
 	}
 
 	info.length = len;
 	info.low_limit = mm->mmap_base;
-	info.high_limit = TASK_SIZE;
+	info.high_limit = task_size;
 	info.align_mask = do_align ? (PAGE_MASK & (SHMLBA - 1)) : 0;
 	info.align_offset = pgoff << PAGE_SHIFT;
 	return vm_unmapped_area(&info);
@@ -88,6 +97,12 @@ arch_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
 	int do_align = 0;
 	int aliasing = cache_is_vipt_aliasing();
 	struct vm_unmapped_area_info info = {};
+	unsigned long task_size = TASK_SIZE;
+
+#ifdef CONFIG_IGLOO
+	if (igloo_task_size)
+		task_size = igloo_task_size;
+#endif
 
 	/*
 	 * We only need to do colour alignment if either the I or D
@@ -97,7 +112,7 @@ arch_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
 		do_align = filp || (flags & MAP_SHARED);
 
 	/* requested length too big for entire address space */
-	if (len > TASK_SIZE)
+	if (len > task_size)
 		return -ENOMEM;
 
 	if (flags & MAP_FIXED) {
@@ -114,7 +129,7 @@ arch_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
 		else
 			addr = PAGE_ALIGN(addr);
 		vma = find_vma(mm, addr);
-		if (TASK_SIZE - len >= addr &&
+		if (task_size - len >= addr &&
 				(!vma || addr + len <= vm_start_gap(vma)))
 			return addr;
 	}
@@ -137,7 +152,7 @@ arch_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
 		VM_BUG_ON(addr != -ENOMEM);
 		info.flags = 0;
 		info.low_limit = mm->mmap_base;
-		info.high_limit = TASK_SIZE;
+		info.high_limit = task_size;
 		addr = vm_unmapped_area(&info);
 	}
 

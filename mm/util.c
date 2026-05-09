@@ -462,6 +462,11 @@ static unsigned long mmap_base(unsigned long rnd, struct rlimit *rlim_stack)
 	else if (gap > MAX_GAP)
 		gap = MAX_GAP;
 
+#ifdef CONFIG_IGLOO
+	if (igloo_task_size)
+		return PAGE_ALIGN(igloo_task_size - gap - rnd);
+#endif
+
 	return PAGE_ALIGN(STACK_TOP - gap - rnd);
 #endif
 }

@@ -49,7 +49,14 @@
 #include <linux/rseq.h>
 #include <asm/param.h>
 #include <asm/page.h>
+#ifdef CONFIG_IGLOO
 #include <igloo.h>
+#define BAD_ADDR(x) (unlikely((unsigned long)(x) >= (igloo_task_size ? igloo_task_size : TASK_SIZE)))
+#define IGLOO_TASK_SIZE (igloo_task_size ? igloo_task_size : TASK_SIZE)
+#else
+#define BAD_ADDR(x) (unlikely((unsigned long)(x) >= TASK_SIZE))
+#define IGLOO_TASK_SIZE TASK_SIZE
+#endif
 
 #ifndef ELF_COMPAT
 #define ELF_COMPAT 0
@@ -108,8 +115,6 @@ static struct linux_binfmt elf_format = {
 	.min_coredump	= ELF_EXEC_PAGESIZE,
 #endif
 };
-
-#define BAD_ADDR(x) (unlikely((unsigned long)(x) >= TASK_SIZE))
 
 /*
  * We need to explicitly zero any trailing portion of the page that follows
@@ -700,8 +705,8 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 			k = load_addr + eppnt->p_vaddr;
 			if (BAD_ADDR(k) ||
 			    eppnt->p_filesz > eppnt->p_memsz ||
-			    eppnt->p_memsz > TASK_SIZE ||
-			    TASK_SIZE - eppnt->p_memsz < k) {
+			    eppnt->p_memsz > IGLOO_TASK_SIZE ||
+			    IGLOO_TASK_SIZE - eppnt->p_memsz < k) {
 				error = -ENOMEM;
 				goto out;
 			}
@@ -1221,8 +1226,8 @@ out_free_interp:
 		 * <= p_memsz so it is only necessary to check p_memsz.
 		 */
 		if (BAD_ADDR(k) || elf_ppnt->p_filesz > elf_ppnt->p_memsz ||
-		    elf_ppnt->p_memsz > TASK_SIZE ||
-		    TASK_SIZE - elf_ppnt->p_memsz < k) {
+		    elf_ppnt->p_memsz > IGLOO_TASK_SIZE ||
+		    IGLOO_TASK_SIZE - elf_ppnt->p_memsz < k) {
 			/* set_brk can never work. Avoid overflows. */
 			retval = -EINVAL;
 			goto out_free_dentry;
