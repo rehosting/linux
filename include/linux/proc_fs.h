@@ -107,6 +107,11 @@ extern struct proc_dir_entry *proc_create_data(const char *, umode_t,
 					       struct proc_dir_entry *,
 					       const struct proc_ops *,
 					       void *);
+#ifdef CONFIG_IGLOO
+struct proc_dir_entry *igloo_proc_create_pid_data(const char *, umode_t,
+					       const struct file_operations *,
+					       void *);
+#endif
 
 struct proc_dir_entry *proc_create(const char *name, umode_t mode, struct proc_dir_entry *parent, const struct proc_ops *proc_ops);
 extern void proc_set_size(struct proc_dir_entry *, loff_t);

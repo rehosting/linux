@@ -71,6 +71,7 @@
 #include <linux/resource.h>
 #include <linux/module.h>
 #include <linux/mount.h>
+#include <linux/mutex.h>
 #include <linux/security.h>
 #include <linux/ptrace.h>
 #include <linux/printk.h>
@@ -159,6 +160,112 @@ struct pid_entry {
 	const struct file_operations *fop;
 	union proc_op op;
 };
+
+#ifdef CONFIG_IGLOO
+struct igloo_proc_pid_entry {
+	struct list_head list;
+	struct proc_dir_entry *pde;
+	const struct file_operations *fop;
+};
+
+static LIST_HEAD(igloo_proc_pid_entries);
+static DEFINE_MUTEX(igloo_proc_pid_entries_lock);
+
+struct proc_dir_entry *igloo_proc_create_pid_data(const char *name, umode_t mode,
+						  const struct file_operations *fop,
+						  void *data)
+{
+	struct proc_dir_entry *parent = NULL;
+	struct igloo_proc_pid_entry *entry;
+	struct proc_dir_entry *pde;
+	size_t len;
+
+	if (!name || !name[0] || strchr(name, '/'))
+		return NULL;
+	if ((mode & S_IFMT) == 0)
+		mode |= S_IFREG;
+	if ((mode & S_IALLUGO) == 0)
+		mode |= S_IRUGO;
+	if (!S_ISREG(mode) || !fop)
+		return NULL;
+
+	len = strlen(name);
+
+	mutex_lock(&igloo_proc_pid_entries_lock);
+	list_for_each_entry(entry, &igloo_proc_pid_entries, list) {
+		pde = entry->pde;
+		if (pde->namelen == len && !memcmp(pde->name, name, len)) {
+			pde->mode = mode;
+			pde->data = data;
+			entry->fop = fop;
+			mutex_unlock(&igloo_proc_pid_entries_lock);
+			return pde;
+		}
+	}
+	mutex_unlock(&igloo_proc_pid_entries_lock);
+
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+	if (!entry)
+		return NULL;
+	pde = proc_create_reg(name, mode, &parent, data);
+	if (!pde) {
+		kfree(entry);
+		return NULL;
+	}
+
+	entry->pde = pde;
+	entry->fop = fop;
+
+	mutex_lock(&igloo_proc_pid_entries_lock);
+	list_add(&entry->list, &igloo_proc_pid_entries);
+	mutex_unlock(&igloo_proc_pid_entries_lock);
+
+	return pde;
+}
+EXPORT_SYMBOL_GPL(igloo_proc_create_pid_data);
+
+static struct dentry *igloo_proc_pid_instantiate(struct dentry *dentry,
+						 struct task_struct *task,
+						 struct igloo_proc_pid_entry *entry)
+{
+	struct proc_dir_entry *pde = entry->pde;
+	struct inode *inode;
+
+	inode = proc_pid_make_inode(dentry->d_sb, task, pde->mode);
+	if (!inode)
+		return ERR_PTR(-ENOENT);
+
+	pde_get(pde);
+	PROC_I(inode)->pde = pde;
+	inode->i_private = pde->data;
+	inode->i_fop = entry->fop;
+	if (pde->size)
+		inode->i_size = pde->size;
+	pid_update_inode(task, inode);
+	d_set_d_op(dentry, &pid_dentry_operations);
+	return d_splice_alias(inode, dentry);
+}
+
+static struct dentry *igloo_proc_pid_lookup(struct dentry *dentry,
+					    struct task_struct *task)
+{
+	struct igloo_proc_pid_entry *entry;
+	struct dentry *res = ERR_PTR(-ENOENT);
+
+	mutex_lock(&igloo_proc_pid_entries_lock);
+	list_for_each_entry(entry, &igloo_proc_pid_entries, list) {
+		if (entry->pde->namelen != dentry->d_name.len)
+			continue;
+		if (!memcmp(entry->pde->name, dentry->d_name.name,
+			    dentry->d_name.len)) {
+			res = igloo_proc_pid_instantiate(dentry, task, entry);
+			break;
+		}
+	}
+	mutex_unlock(&igloo_proc_pid_entries_lock);
+	return res;
+}
+#endif
 
 #define NOD(NAME, MODE, IOP, FOP, OP) {			\
 	.name = (NAME),					\
@@ -3442,9 +3549,25 @@ struct pid *tgid_pidfd_to_pid(const struct file *file)
 
 static struct dentry *proc_tgid_base_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
-	return proc_pident_lookup(dir, dentry,
-				  tgid_base_stuff,
-				  tgid_base_stuff + ARRAY_SIZE(tgid_base_stuff));
+	struct dentry *res;
+#ifdef CONFIG_IGLOO
+	struct task_struct *task;
+#endif
+
+	res = proc_pident_lookup(dir, dentry,
+				 tgid_base_stuff,
+				 tgid_base_stuff + ARRAY_SIZE(tgid_base_stuff));
+#ifdef CONFIG_IGLOO
+	if (!IS_ERR(res) || PTR_ERR(res) != -ENOENT)
+		return res;
+
+	task = get_proc_task(dir);
+	if (!task)
+		return res;
+	res = igloo_proc_pid_lookup(dentry, task);
+	put_task_struct(task);
+#endif
+	return res;
 }
 
 static const struct inode_operations proc_tgid_base_inode_operations = {
