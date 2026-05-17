@@ -27,6 +27,11 @@ extern struct proc_dir_entry *proc_create_data(const char *, umode_t,
 					       struct proc_dir_entry *,
 					       const struct file_operations *,
 					       void *);
+#ifdef CONFIG_IGLOO
+extern struct proc_dir_entry *igloo_proc_create_pid_data(const char *, umode_t,
+					       const struct file_operations *,
+					       void *);
+#endif
 
 static inline struct proc_dir_entry *proc_create(
 	const char *name, umode_t mode, struct proc_dir_entry *parent,
