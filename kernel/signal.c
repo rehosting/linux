@@ -34,6 +34,9 @@
 #include <linux/compat.h>
 #include <linux/cn_proc.h>
 #include <linux/compiler.h>
+#ifdef CONFIG_IGLOO
+#include <linux/igloo_signal.h>
+#endif
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/signal.h>
@@ -50,6 +53,11 @@
  */
 
 static struct kmem_cache *sigqueue_cachep;
+
+#ifdef CONFIG_IGLOO
+igloo_signal_deliver_hook_t igloo_signal_deliver_hook;
+EXPORT_SYMBOL_GPL(igloo_signal_deliver_hook);
+#endif
 
 int print_fatal_signals __read_mostly;
 
@@ -986,6 +994,13 @@ static int __send_signal(int sig, struct siginfo *info, struct task_struct *t,
 	assert_spin_locked(&t->sighand->siglock);
 
 	result = TRACE_SIGNAL_IGNORED;
+#ifdef CONFIG_IGLOO
+	if (sig && igloo_signal_deliver_hook &&
+	    igloo_signal_deliver_hook(sig, t)) {
+		ret = 0;
+		goto ret;
+	}
+#endif
 	if (!prepare_signal(sig, t,
 			from_ancestor_ns || (info == SEND_SIG_FORCED)))
 		goto ret;
